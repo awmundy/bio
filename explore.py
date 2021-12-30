@@ -80,7 +80,7 @@ def subprocess_debugging():
 # <Download fasta files> -> fasta files -> <kallisto> -> index
 
 # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-fastq_root_dir = 'c:/diyt/data/fastq/'
+fastq_root_dir = '/media/andrew/Windows/diyt/data/fastq/'
 threads = 4
 make_fastq_subdirs_and_move_fastq_files(fastq_root_dir)
 
@@ -104,7 +104,8 @@ fastq_filepath = fastq_subdir + fastq_label + '.gz'
 # file downloaded from http://ftp.ensembl.org/pub/release-104/fasta/homo_sapiens/cdna/
 
 
-fasta_dir = 'c:/diyt/data/fasta/'
+# fasta_dir = 'c:/diyt/data/fasta/'
+fasta_dir = 'media/andrew/Windows/diyt/data/fasta/'
 fasta_file = r'Homo_sapiens.GRCh38.cdna.all.fa'
 fasta_filepath = fasta_dir + fasta_file
 kallisto_build_index(fasta_filepath)
