@@ -16,10 +16,28 @@ def rename_fastq_file(fastq_root_dir, fname):
 
     return new_fname
 
-def rename_and_move_fastq_files(fastq_root_dir):
+
+def assert_one_fastq_gz_file_in_dir(_dir):
+    potential_fastq_files = []
+    for _file in os.listdir(_dir):
+        if (_file.endswith('.gz')) & ('fastq' in _file):
+            potential_fastq_files += [_file]
+    assert len(potential_fastq_files) == 1
+
+def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir, fastq_folders_dir):
+    '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
+    the fastq files/dirs have consistent file extensions
+    params:
+        fastq_root_dir: directory where fastq .gz files are stored together
+        fastq_folders_dir: directory where fastq .gz files are to be moved, with each of them getting
+                          their own subdir
+    '''
+    # make a directory for storing fastq folders
+    os.makedirs(fastq_folders_dir, exist_ok=True)
+
     files = [x for x in os.listdir(fastq_root_dir) if x.endswith('.gz')]
     if len(files) == 0:
-        print('All fastq files already moved')
+        print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
 
     for fname in files:
@@ -32,40 +50,42 @@ def rename_and_move_fastq_files(fastq_root_dir):
         os.makedirs(subdir)
         shutil.move(fastq_root_dir + new_fname, subdir + new_fname)
 
+    for fastq_dir_name in os.listdir(fastq_folders_dir):
+        assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
 
-def get_fastq_fpaths(fastq_dir):
+
+def get_fastq_fpaths(_dir):
     """returns a list of all .fastq.gz files in the given fastq_dir's subdirectories"""
     fastq_paths = []
-    for subdir in [x.path for x in os.scandir(fastq_dir) if x.is_dir()]:
+    for subdir in [x.path for x in os.scandir(_dir) if x.is_dir()]:
         fastq_paths += [x.path for x in os.scandir(subdir) if x.path.endswith('.fastq.gz')]
 
     return fastq_paths
 
 
-def fastqc(fastq_dir, threads):
+def fastqc(fastq_folders_dir, threads):
     """use fastqc to construct an html summary file of some quality control checks on raw seq data"""
 
-    fastqc_dir = fastq_dir + '/fastqc/'
-    if not os.path.exists(fastqc_dir):
-        os.makedirs(fastqc_dir)
-
-    fastq_paths = get_fastq_fpaths(fastq_dir)
+    fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
     # dont overwrite if they already exist
-    for _path in fastq_paths:
-        fastqc_path = fastqc_dir + _path.split('/')[-1:][0].replace('.fastq.gz', '') + '_fastqc.html'
-        if os.path.exists(fastqc_path):
-            new_fastq_paths = [x for x in fastq_paths if x != _path]
+    fastq_paths_where_fastqc_is_needed = []
+    for fastq_path in fastq_paths:
+        fastq_dir = os.path.dirname(fastq_path) + '/'
+        fastq_file_name = os.path.basename(fastq_path)
+        fastqc_html_file_name = fastq_file_name.replace('.fastq.gz', '_fastqc.html')
+        # don't overwrite
+        if not os.path.exists(fastq_dir + fastqc_html_file_name):
+            fastq_paths_where_fastqc_is_needed += [fastq_path]
 
-
-    if len(new_fastq_paths) > 0:
-        print('building fastqc output for the following fastq files:', fastq_paths)
-        cmd = 'fastqc ' + ' '.join(fastq_paths)
-        cmd += f' -t {threads} -o {fastqc_dir}'
+    if len(fastq_paths_where_fastqc_is_needed) > 0:
+        print('building fastqc output for the following fastq files:', fastq_paths_where_fastqc_is_needed)
+        cmd = 'fastqc ' + ' '.join(fastq_paths_where_fastqc_is_needed)
+        # each thread handles one fastq file and writes the output in the dir of the fastq file being processed
+        cmd += f' -t {threads}'
         subprocess.run(cmd, shell=True)
     else:
         print('All fastqc output already produced')
-
 
 def get_index_fpath_from_fasta_fpath(fasta_fpath):
     index_fpath = fasta_fpath.replace('.fa.gz', '') + '.index'
@@ -155,36 +175,37 @@ def kallisto_quant(index_fpath, fastq_dir, threads):
     print('done')
 
 
-def multiqc(fastq_dir):
+def multiqc(fastq_root_dir):
     '''multiqc looks for all relevant files in fastq_dir (i.e. all fastqc files, kallisto quant logs'''
-    multiqc_dir = fastq_dir + 'multiqc/'
+    multiqc_dir = fastq_root_dir + 'multiqc/'
     os.makedirs(multiqc_dir, exist_ok=True)
 
-    cmd = f'multiqc -d {fastq_dir} -o {multiqc_dir}'
+    cmd = f'multiqc -d {fastq_root_dir} -o {multiqc_dir}'
     subprocess.run(cmd, shell=True)
 
 
 
 ## Flow ##
 # <Download fasta file> -> fasta file -> <kallisto> -> index
-# <Download fasta files> -> <Move fastq files> -> fastq files -> <fastqc> -> HTML output
+# <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> -> HTML output
 
 # http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
 fasta_fpath = '/media/amundy/Windows/diyt/data/fasta/Homo_sapiens.GRCh38.cdna.all.fa.gz'
 # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-fastq_dir = '/media/amundy/Windows/diyt/data/fastq/'
+fastq_root_dir = '/media/amundy/Windows/diyt/data/fastq/'
+fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
 threads = 10
 
 
 index_fpath = kallisto_build_index(fasta_fpath)
-
-rename_and_move_fastq_files(fastq_dir)
-fastqc(fastq_dir, threads)
-kallisto_quant(index_fpath, fastq_dir, threads)
-multiqc(fastq_dir)
+rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
+fastqc(fastq_folders_dir, threads)
+# kallisto_quant(index_fpath, fastq_root_dir, threads)
+# multiqc(fastq_root_dir)
 
 
 # todo add hdf5 to conda env
+
 
 
 
