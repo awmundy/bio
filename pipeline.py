@@ -105,74 +105,64 @@ def kallisto_build_index(fasta_fpath):
     return index_fpath
 
 
+def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
+    """
+    Runs the kallisto quantification process on each fastq file in fastq_root_dir
+    params:
+        threads: number of threads to use for EACH fastq file being processed. Multiple fastq files
+                 are not multiprocessed; fastq files are iterated serially and multiprocessing is
+                 used during the quantification algorithm
+        seq_params: dict of params describing some sequencing charcteristics of the fastq files
+                    that kallisto quant needs to know
+    """
 
-def get_new_fastq_inputs_by_comparing_to_kallisto_json(output_dir, fastq_fpaths):
-    # check if there was a previous kallisto quant run done by looking for a run_info.json
-    json_meta = output_dir + 'run_info.json'
-    if os.path.exists(json_meta):
-        with open(json_meta) as f:
-            meta = json.load(f)
-        previous_fastq_inputs = [x for x in meta['call'].split(' ') if '.fastq.gz' in x]
-        new_fastq_inputs = [x for x in fastq_fpaths if x not in previous_fastq_inputs]
-    else:
-        new_fastq_inputs = fastq_fpaths
+    fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
-    return new_fastq_inputs
+    # build list of fastq paths where kallisto quant hasnt been run yet
+    fastq_paths_where_kallisto_quant_is_needed = []
+    for fastq_path in fastq_paths:
+        fastq_dir = os.path.dirname(fastq_path) + '/'
+        if not os.path.exists(fastq_dir + 'abundance.h5'):
+            fastq_paths_where_kallisto_quant_is_needed += [fastq_path]
 
-def kallisto_quant(index_fpath, fastq_dir, threads):
-    # todo dont run if there is already stuff in the output dir
-
-    # todo run each fastq serially, when running them all together it stacks them and just produces one
-    #   combined set of outputs that aren't meaningful
-
-    fastq_fpaths = get_fastq_fpaths(fastq_dir)[:1]
-    output_dir = fastq_dir + 'kallisto_quant' + '/'
-    os.makedirs(output_dir, exist_ok=True)
-
-    new_fastq_inputs = get_new_fastq_inputs_by_comparing_to_kallisto_json(output_dir, fastq_fpaths)
-    if len(new_fastq_inputs) == 0:
-        print('kallisto quant already run on all fastq files in', fastq_dir)
+    if len(fastq_paths_where_kallisto_quant_is_needed) == 0:
+        print('kallisto quant already complete for all fastq files in', fastq_folders_dir)
         return
 
-    # todo add to args(probably a new arg that is a dict called kallisto_quant_args)
-    # number of reads of the polymer that occurred during gene sequencing,
-    #  pass --single for single read or empty string for paired (default execution is paired)
-    read_end_type = '--single'
-    # sequencing procedure has an average fragment length of the sequences (and standard deviation)
-    frag_length = 250
-    frag_length_sd = 30
+    for fastq_path in fastq_paths_where_kallisto_quant_is_needed:
+        print('running kallisto quant on', fastq_path)
 
-    cmd = (f'kallisto quant '
-           f'-i {index_fpath} '
-           f'-o {output_dir} '
-           f'-t {threads} '
-           f'{read_end_type} '
-           f'-l {frag_length} '
-           f'-s {frag_length_sd} '
-           )
-    cmd += ' '.join(fastq_fpaths)
+        # save the output next to the fastq files
+        quant_out_dir = os.path.dirname(fastq_path) + '/'
 
-    log_fpath = output_dir + 'log.log'
+        cmd = (f"kallisto quant "
+               f"-i {index_fpath} "
+               f"-o {quant_out_dir} "
+               f"-t {threads} "
+               f"-l {seq_params['frag_length']} "
+               f"-s {seq_params['frag_length_sd']} "
+               f"{seq_params['read_end_type']} "
+               f"{fastq_path}")
 
-    # todo figure out how to print stuff out as it's running
-    with open(log_fpath, 'wb') as f:
-        # capture both the stdout and stderr in one object
-        output = subprocess.run(cmd, shell=True, stdout=PIPE, stderr=STDOUT)
+        log_path = quant_out_dir + 'kallisto_quant_log.log'
+        # todo figure out how to print stuff out as it's running instead of once subprocess has completed
+        with open(log_path, 'wb') as f:
+            # capture both the stdout and stderr in one object
+            output = subprocess.run(cmd, shell=True, stdout=PIPE, stderr=STDOUT)
 
-        # print and write to log
-        for line in output.stdout.splitlines():
-            print(line)
-            f.write(b'\n')
-            f.write(line)
-
-        if output.stderr:
-            for line in output.error.splitlines():
+            # print and write to log
+            for line in output.stdout.splitlines():
                 print(line)
                 f.write(b'\n')
                 f.write(line)
-            raise Exception('Kallisto quant process failed')
 
-    print('done')
+            if output.stderr:
+                for line in output.error.splitlines():
+                    print(line)
+                    f.write(b'\n')
+                    f.write(line)
+                raise Exception('Kallisto quant process failed')
+    print('done running kallisto quant')
 
 
 def multiqc(fastq_root_dir):
@@ -188,6 +178,12 @@ def multiqc(fastq_root_dir):
 ## Flow ##
 # <Download fasta file> -> fasta file -> <kallisto> -> index
 # <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> -> HTML output
+# index + fastq file -> kallisto quant
+
+# paramaters of the sequence construction
+seq_params = {'read_end_type': '--single',
+              'frag_length': 250,
+              'frag_length_sd': 30}
 
 # http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
 fasta_fpath = '/media/amundy/Windows/diyt/data/fasta/Homo_sapiens.GRCh38.cdna.all.fa.gz'
@@ -196,11 +192,11 @@ fastq_root_dir = '/media/amundy/Windows/diyt/data/fastq/'
 fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
 threads = 10
 
-
 index_fpath = kallisto_build_index(fasta_fpath)
 rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
 fastqc(fastq_folders_dir, threads)
-# kallisto_quant(index_fpath, fastq_root_dir, threads)
+kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
+# todo should this be run after kallisto_quant?
 # multiqc(fastq_root_dir)
 
 
