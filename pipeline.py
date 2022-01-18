@@ -85,7 +85,7 @@ def fastqc(fastq_folders_dir, threads):
         cmd += f' -t {threads}'
         subprocess.run(cmd, shell=True)
     else:
-        print('All fastqc output already produced')
+        print('All fastqc output already produced for fastq files in', fastq_folders_dir)
 
 def get_index_fpath_from_fasta_fpath(fasta_fpath):
     index_fpath = fasta_fpath.replace('.fa.gz', '') + '.index'
@@ -166,10 +166,13 @@ def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
 
 
 def multiqc(fastq_root_dir):
-    '''multiqc looks for all relevant files in fastq_dir (i.e. all fastqc files, kallisto quant logs'''
+    '''multiqc looks for all relevant files in fastq_dir (i.e. all fastqc files, kallisto quant logs) and
+    builds a summary report out of them'''
     multiqc_dir = fastq_root_dir + 'multiqc/'
     os.makedirs(multiqc_dir, exist_ok=True)
 
+    # if there are existing multiqc report, multiqc automatically will make new subdirs
+    # to save new runs in
     cmd = f'multiqc -d {fastq_root_dir} -o {multiqc_dir}'
     subprocess.run(cmd, shell=True)
 
@@ -179,6 +182,7 @@ def multiqc(fastq_root_dir):
 # <Download fasta file> -> fasta file -> <kallisto> -> index
 # <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> -> HTML output
 # index + fastq file -> kallisto quant
+# fastqc output + kallisto quant output -> multiqc
 
 # paramaters of the sequence construction
 seq_params = {'read_end_type': '--single',
@@ -196,17 +200,5 @@ index_fpath = kallisto_build_index(fasta_fpath)
 rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
 fastqc(fastq_folders_dir, threads)
 kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
-# todo should this be run after kallisto_quant?
-# multiqc(fastq_root_dir)
-
-
-# todo add hdf5 to conda env
-
-
-
-
-# logging.basicConfig(filename=log_path, level=logging.DEBUG)
-# cmd = 'conda env list'
-# output = subprocess.run(cmd, shell=True, stdout=PIPE, stderr=STDOUT)
-# logging.info(output.stdout)
+multiqc(fastq_root_dir)
 
