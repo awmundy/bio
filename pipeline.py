@@ -64,7 +64,11 @@ def get_fastq_fpaths(_dir):
 
 
 def fastqc(fastq_folders_dir, threads):
-    """use fastqc to construct an html summary file of some quality control checks on raw seq data"""
+    """use fastqc to do some quality control checks on raw seq data
+    outputs:
+        <fastq_filename>_fastqc.html file: html report showing the qc results
+        <fastq_filename>_fastqc.zip file: collection of qc results and other inputs to the html report
+        """
 
     fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
@@ -114,6 +118,11 @@ def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
                  used during the quantification algorithm
         seq_params: dict of params describing some sequencing charcteristics of the fastq files
                     that kallisto quant needs to know
+    outputs:
+        abundance.h5: a HDF5 binary file containing run info, abundance esimates, bootstrap estimates,
+                      and transcript length information length. This file can be read in by sleuth in R
+        abundance.tsv: a plaintext file of the abundance estimates. It does not contains bootstrap estimates
+        run_info.json: metadata about the kallisto quant run
     """
 
     fastq_paths = get_fastq_fpaths(fastq_folders_dir)
