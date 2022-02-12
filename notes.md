@@ -28,4 +28,3 @@ Installed Bioconductor for R, following lecture
 
 Style
 - Rstudio can style code (default shortcut Ctrl + Alt + A)
-- Default styling was weird, installed the `styler` package and it automatically did indentation better
