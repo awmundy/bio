@@ -25,4 +25,7 @@ Installed Bioconductor for R, following lecture
   - `if (!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
       BiocManager::install(version = "3.13"`
-- test
+
+Style
+- Rstudio can style code (default shortcut Ctrl + Alt + A)
+- Default styling was weird, installed the `styler` package and it automatically did indentation better
