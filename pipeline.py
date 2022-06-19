@@ -4,8 +4,9 @@ from datetime import datetime as dt
 import subprocess
 from subprocess import PIPE, STDOUT
 import json
+import glob
 
-def rename_fastq_file(fastq_root_dir, fname):
+def fix_fastq_gz_extension_if_needed(fastq_root_dir, fname):
     suffix = fname.split('.fastq')[-1].split('.gz')[0]
     pre_dot_fastq_fname = fname.split('.fastq')[0]
     new_fname = pre_dot_fastq_fname + suffix + '.fastq.gz'
@@ -24,7 +25,7 @@ def assert_one_fastq_gz_file_in_dir(_dir):
             potential_fastq_files += [_file]
     assert len(potential_fastq_files) == 1
 
-def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir, fastq_folders_dir):
+def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir):
     '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
     the fastq files/dirs have consistent file extensions
     params:
@@ -33,22 +34,26 @@ def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir, fastq_folder
                           their own subdir
     '''
     # make a directory for storing fastq folders
+    fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
     os.makedirs(fastq_folders_dir, exist_ok=True)
 
-    files = [x for x in os.listdir(fastq_root_dir) if x.endswith('.gz')]
+    files = glob.glob(fastq_root_dir + '/**/*.fastq.gz', recursive=True)
     if len(files) == 0:
         print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
 
-    for fname in files:
+    for fpath in files:
+        fdir = os.path.dirname(fpath)+ '/'
+        fname = os.path.basename(fpath)
         # for fastq files with weird extensions like .fastq-004.gz, move "-004" in to filename
-        new_fname = rename_fastq_file(fastq_root_dir, fname)
+        fname = fix_fastq_gz_extension_if_needed(fastq_root_dir, fname)
+        fpath = fdir + fname
 
         # store each fastq in its own subdir
-        subdir = fastq_root_dir + new_fname.replace('.fastq.gz', '') + '/'
-        print('moving file', new_fname, 'to', subdir)
+        subdir = fastq_folders_dir + fname.replace('.fastq.gz', '') + '/'
+        print('moving file', fname, 'to', subdir)
         os.makedirs(subdir)
-        shutil.move(fastq_root_dir + new_fname, subdir + new_fname)
+        shutil.move(fpath, subdir + fname)
 
     for fastq_dir_name in os.listdir(fastq_folders_dir):
         assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
@@ -193,32 +198,26 @@ def multiqc(fastq_root_dir):
 # index + fastq file -> kallisto quant
 # fastqc output + kallisto quant output -> multiqc
 
-# paramaters of the sequence construction
-seq_params = {'read_end_type': '--single',
-              'frag_length': 250,
-              'frag_length_sd': 30}
-
 cfgs = \
     {'diyt':
         {# http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
          'ref_genome': '/media/amundy/Windows/bio/eference_genomes/human/Homo_sapiens.GRCh38.cdna.all.fa.gz',
          # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-         'rna_txs_dir': '/media/amundy/Windows/bio/diyt/rna_txs/',
+         'rna_txs': '/media/amundy/Windows/bio/diyt/rna_txs/',
          'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}},
     'ac_thymus':
         {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
          'ref_genome': '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
-         'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
+         'rna_txs': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
          'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}}
         }
 
 run_type = 'ac_thymus'
 cfg = cfgs[run_type]
-fastq_folders_dir = cfg['rna_txs_dir'] + 'fastq_folders/'
 threads = 10
 
 index_fpath = kallisto_build_index(cfg['ref_genome'])
-# rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
+rename_fastq_files_and_store_each_in_own_subdir(cfg['rna_txs'])
 # fastqc(fastq_folders_dir, threads)
 # kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
 # multiqc(fastq_root_dir)
