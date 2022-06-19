@@ -37,7 +37,7 @@ def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir):
     fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
     os.makedirs(fastq_folders_dir, exist_ok=True)
 
-    files = glob.glob(fastq_root_dir + '/**/*.fastq.gz', recursive=True)
+    files = get_fastq_fpaths(fastq_root_dir, ignore_fastq_folders_dir=True)
     if len(files) == 0:
         print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
@@ -59,11 +59,14 @@ def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir):
         assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
 
 
-def get_fastq_fpaths(_dir):
-    """returns a list of all .fastq.gz files in the given fastq_dir's subdirectories"""
-    fastq_paths = []
-    for subdir in [x.path for x in os.scandir(_dir) if x.is_dir()]:
-        fastq_paths += [x.path for x in os.scandir(subdir) if x.path.endswith('.fastq.gz')]
+def get_fastq_fpaths(_dir, ignore_fastq_folders_dir=False):
+    """returns a list of all .fastq.gz files in the given _dir's subdirectories"""
+    # fastq_paths = []
+    # for subdir in [x.path for x in os.scandir(_dir) if x.is_dir()]:
+    #     fastq_paths += [x.path for x in os.scandir(subdir) if x.path.endswith('.fastq.gz')]
+    fastq_paths = glob.glob(_dir + '/**/*.fastq.gz', recursive=True)
+    if ignore_fastq_folders_dir:
+        fastq_paths = [x for x in fastq_paths if 'fastq_folders' not in x]
 
     return fastq_paths
 
