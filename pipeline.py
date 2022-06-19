@@ -91,20 +91,20 @@ def fastqc(fastq_folders_dir, threads):
     else:
         print('All fastqc output already produced for fastq files in', fastq_folders_dir)
 
-def get_index_fpath_from_fasta_fpath(fasta_fpath):
-    index_fpath = fasta_fpath.replace('.fa.gz', '') + '.index'
+def get_index_fpath_from_ref_genome_fpath(ref_genome_fpath):
+    index_fpath = ref_genome_fpath.replace('.fa.gz', '') + '.index'
     return index_fpath
 
 
-def kallisto_build_index(fasta_fpath):
+def kallisto_build_index(ref_genome_fpath):
 
-    index_fpath = get_index_fpath_from_fasta_fpath(fasta_fpath)
+    index_fpath = get_index_fpath_from_ref_genome_fpath(ref_genome_fpath)
 
     if os.path.exists(index_fpath):
-        print('Index already exists for', fasta_fpath)
+        print('Index already exists for', ref_genome_fpath)
         return index_fpath
 
-    subprocess.run( f'kallisto index -i {index_fpath} {fasta_fpath}', shell=True)
+    subprocess.run( f'kallisto index -i {index_fpath} {ref_genome_fpath}', shell=True)
 
     return index_fpath
 
@@ -198,16 +198,28 @@ seq_params = {'read_end_type': '--single',
               'frag_length': 250,
               'frag_length_sd': 30}
 
-# http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
-fasta_fpath = '/media/amundy/Windows/diyt/data/fasta/Homo_sapiens.GRCh38.cdna.all.fa.gz'
-# files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-fastq_root_dir = '/media/amundy/Windows/diyt/data/fastq/'
-fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
+cfgs = \
+    {'diyt':
+        {# http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
+         'ref_genome': '/media/amundy/Windows/bio/eference_genomes/human/Homo_sapiens.GRCh38.cdna.all.fa.gz',
+         # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
+         'rna_txs_dir': '/media/amundy/Windows/bio/diyt/rna_txs/',
+         'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}},
+    'ac_thymus':
+        {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
+         'ref_genome': '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
+         'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
+         'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}}
+        }
+
+run_type = 'ac_thymus'
+cfg = cfgs[run_type]
+fastq_folders_dir = cfg['rna_txs_dir'] + 'fastq_folders/'
 threads = 10
 
-index_fpath = kallisto_build_index(fasta_fpath)
-rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
-fastqc(fastq_folders_dir, threads)
-kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
-multiqc(fastq_root_dir)
+index_fpath = kallisto_build_index(cfg['ref_genome'])
+# rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir,fastq_folders_dir)
+# fastqc(fastq_folders_dir, threads)
+# kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
+# multiqc(fastq_root_dir)
 
