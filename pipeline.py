@@ -71,13 +71,13 @@ def get_fastq_fpaths(_dir, ignore_fastq_folders_dir=False):
     return fastq_paths
 
 
-def fastqc(fastq_folders_dir, threads):
+def fastqc(rna_txs_dir, threads):
     """use fastqc to do some quality control checks on raw seq data
     outputs:
         <fastq_filename>_fastqc.html file: html report showing the qc results
         <fastq_filename>_fastqc.zip file: collection of qc results and other inputs to the html report
         """
-
+    fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
     fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
     # dont overwrite if they already exist
@@ -193,11 +193,34 @@ def multiqc(fastq_root_dir):
     cmd = f'multiqc -d {fastq_root_dir} -o {multiqc_dir}'
     subprocess.run(cmd, shell=True)
 
+def combine_fastq_files_ac_thymus(rna_txs_dir, run_type):
+    sample_dirs = [os.path.join(rna_txs_dir, x) + '/' for x in os.listdir(rna_txs_dir)]
+    dirs_to_process = []
+    for sample_dir in sample_dirs:
+        if len([x for x in os.listdir(sample_dir) if 'L001_' in x]) > 0:
+            dirs_to_process += [sample_dir]
 
+    if (len(dirs_to_process) == 0) | (run_type != 'ac_thymus'):
+        print('no combining of fastq files necessary')
+        return
+
+    for sample_dir in dirs_to_process:
+        for read_type in ['R1', 'R2']:
+            fpath_1 = [sample_dir + x for x in os.listdir(sample_dir) if 'L001_' + read_type in x][0]
+            fpath_2 = [sample_dir + x for x in os.listdir(sample_dir) if 'L002_' + read_type in x][0]
+            if (not os.path.exists(fpath_1)) | (not os.path.exists(fpath_2)):
+                raise Exception('Can not determine fastq files to combine')
+            combined_fpath = fpath_1.replace('_L001', '')
+            print(f'combining files {fpath_1} {fpath_2}')
+            cmd = f'cat {fpath_1} {fpath_2} > {combined_fpath}'
+            subprocess.run(cmd, shell=True)
+            # delete uncombined files
+            cmd = f'rm {fpath_1} {fpath_2}'
+            subprocess.run(cmd, shell=True)
 
 ## Flow ##
 # <Download fasta file> -> fasta file -> <kallisto> -> index
-# <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> -> HTML output
+# <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> - > HTML output
 # index + fastq file -> kallisto quant
 # fastqc output + kallisto quant output -> multiqc
 
@@ -220,8 +243,9 @@ cfg = cfgs[run_type]
 threads = 10
 
 index_fpath = kallisto_build_index(cfg['ref_genome'])
-rename_fastq_files_and_store_each_in_own_subdir(cfg['rna_txs'])
-# fastqc(fastq_folders_dir, threads)
+combine_fastq_files_ac_thymus(cfg['rna_txs'], run_type)
+# rename_fastq_files_and_store_each_in_own_subdir(cfg['rna_txs'])
+# fastqc(cfg['rna_txs'], threads)
 # kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
 # multiqc(fastq_root_dir)
 
