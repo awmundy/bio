@@ -144,7 +144,7 @@ def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
                     that kallisto quant needs to know
     outputs:
         abundance.h5: a HDF5 binary file containing run info, abundance esimates, bootstrap estimates,
-                      and transcript length information length. This file can be read in by sleuth in R
+                      and transcript length information. This file can be read in by sleuth in R
         abundance.tsv: a plaintext file of the abundance estimates. It does not contains bootstrap estimates
         run_info.json: metadata about the kallisto quant run
     """
@@ -251,6 +251,7 @@ cfgs = \
         {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
          'ref_genome': '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
          'rna_txs': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
+          # todo figure out these (and other) params for the thymus data
          'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}}
         }
 
