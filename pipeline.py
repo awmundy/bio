@@ -47,23 +47,23 @@ def move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir):
         os.makedirs(subdir)
         shutil.move(fpath, subdir + fname)
 
-def prep_fastq_files(fastq_root_dir, run_type):
+def prep_fastq_files(rna_txs_dir, run_type):
     '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
     the fastq files/dirs have consistent file extensions
     params:
-        fastq_root_dir: directory where fastq .gz files are stored together
+        rna_txs_dir: directory where fastq .gz files are stored together
         fastq_folders_dir: directory where fastq .gz files are to be moved, with each of them getting
                           their own subdir
     '''
 
     if run_type == 'ac_thymus':
-        combine_fastq_files_ac_thymus(fastq_root_dir)
+        combine_fastq_files_ac_thymus(rna_txs_dir)
         
     # make a directory for storing fastq folders
-    fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
+    fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
     os.makedirs(fastq_folders_dir, exist_ok=True)
 
-    fpaths = get_fastq_fpaths(fastq_root_dir, ignore_fastq_folders_dir=True)
+    fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
     if len(fpaths) == 0:
         print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
@@ -133,7 +133,7 @@ def kallisto_build_index(ref_genome_fpath):
     return index_fpath
 
 
-def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
+def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
     """
     Runs the kallisto quantification process on each fastq file in fastq_root_dir
     params:
@@ -148,7 +148,7 @@ def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
         abundance.tsv: a plaintext file of the abundance estimates. It does not contains bootstrap estimates
         run_info.json: metadata about the kallisto quant run
     """
-
+    fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
     fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
     # build list of fastq paths where kallisto quant hasnt been run yet
@@ -198,15 +198,15 @@ def kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params):
     print('done running kallisto quant')
 
 
-def multiqc(fastq_root_dir):
+def multiqc(rna_txs_dir):
     '''multiqc looks for all relevant files in fastq_dir (i.e. all fastqc files, kallisto quant logs) and
     builds a summary report out of them'''
-    multiqc_dir = fastq_root_dir + 'multiqc/'
+    multiqc_dir = rna_txs_dir + 'multiqc/'
     os.makedirs(multiqc_dir, exist_ok=True)
 
     # if there are existing multiqc report, multiqc automatically will make new subdirs
     # to save new runs in
-    cmd = f'multiqc -d {fastq_root_dir} -o {multiqc_dir}'
+    cmd = f'multiqc -d {rna_txs_dir} -o {multiqc_dir}'
     subprocess.run(cmd, shell=True)
 
 def combine_fastq_files_ac_thymus(rna_txs_dir):
@@ -262,6 +262,13 @@ threads = 10
 index_fpath = kallisto_build_index(cfg['ref_genome'])
 prep_fastq_files(cfg['rna_txs'], run_type)
 fastqc(cfg['rna_txs'], threads)
-# kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
-# multiqc(fastq_root_dir)
+kallisto_quant(index_fpath, cfg['rna_txs'], threads, cfg['seq_params'])
+multiqc(cfg['rna_txs'],)
 
+# Thy_Y_CX3pos3_IGO_11991_B_5_S37_R1_001.fastq.gz
+#   - not in gzip format
+#   - kallisto quant failes to pseudoalign
+# Thy_Y_CX3pos3_IGO_11991_B_5_S37_R2_001.fastq.gz
+#   - 45% of way through fastqc: uk.ac.babraham.FastQC.Sequence.SequenceFormatException: Midline
+#     <seq string> didn't start with '+'
+#   - causes kallisto quant to hang?
