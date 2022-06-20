@@ -6,16 +6,30 @@ from subprocess import PIPE, STDOUT
 import json
 import glob
 
-def fix_fastq_gz_extension_if_needed(fastq_root_dir, fname):
-    suffix = fname.split('.fastq')[-1].split('.gz')[0]
-    pre_dot_fastq_fname = fname.split('.fastq')[0]
-    new_fname = pre_dot_fastq_fname + suffix + '.fastq.gz'
+def fix_fastq_file_names_if_needed(fpaths):
 
-    if fname != new_fname:
-        print('renaming', fname, 'to', new_fname)
-        os.rename(fastq_root_dir + fname, fastq_root_dir + new_fname)
+    new_fpaths = []
 
-    return new_fname
+    for fpath in fpaths:
+        fdir = os.path.dirname(fpath)+ '/'
+        fname = os.path.basename(fpath)
+        
+        # for fastq files with weird extensions like .fastq-004.gz, move "-004" in to filename
+        suffix = fname.split('.fastq')[-1].split('.gz')[0]
+        pre_dot_fastq_fname = fname.split('.fastq')[0]
+        new_fname = pre_dot_fastq_fname + suffix + '.fastq.gz'
+
+        if fname != new_fname:
+            # rename file
+            print('renaming', fname, 'to', new_fname)
+            new_fpath = fdir + new_fname
+            os.rename(fpath, new_fpath)
+            new_fpaths += [new_fpath]
+        else:
+            # or just append current path to list to return
+            new_fpaths += [fpath]
+
+    return new_fpaths
 
 
 def assert_one_fastq_gz_file_in_dir(_dir):
@@ -25,7 +39,15 @@ def assert_one_fastq_gz_file_in_dir(_dir):
             potential_fastq_files += [_file]
     assert len(potential_fastq_files) == 1
 
-def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir):
+def move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir):
+    for fpath in fpaths:
+        fname = os.path.basename(fpath)
+        subdir = fastq_folders_dir + fname.replace('.fastq.gz', '') + '/'
+        print('moving file', fname, 'to', subdir)
+        os.makedirs(subdir)
+        shutil.move(fpath, subdir + fname)
+
+def prep_fastq_files(fastq_root_dir, run_type):
     '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
     the fastq files/dirs have consistent file extensions
     params:
@@ -33,27 +55,21 @@ def rename_fastq_files_and_store_each_in_own_subdir(fastq_root_dir):
         fastq_folders_dir: directory where fastq .gz files are to be moved, with each of them getting
                           their own subdir
     '''
+
+    if run_type == 'ac_thymus':
+        combine_fastq_files_ac_thymus(fastq_root_dir)
+        
     # make a directory for storing fastq folders
     fastq_folders_dir = fastq_root_dir + 'fastq_folders/'
     os.makedirs(fastq_folders_dir, exist_ok=True)
 
-    files = get_fastq_fpaths(fastq_root_dir, ignore_fastq_folders_dir=True)
-    if len(files) == 0:
+    fpaths = get_fastq_fpaths(fastq_root_dir, ignore_fastq_folders_dir=True)
+    if len(fpaths) == 0:
         print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
-
-    for fpath in files:
-        fdir = os.path.dirname(fpath)+ '/'
-        fname = os.path.basename(fpath)
-        # for fastq files with weird extensions like .fastq-004.gz, move "-004" in to filename
-        fname = fix_fastq_gz_extension_if_needed(fastq_root_dir, fname)
-        fpath = fdir + fname
-
-        # store each fastq in its own subdir
-        subdir = fastq_folders_dir + fname.replace('.fastq.gz', '') + '/'
-        print('moving file', fname, 'to', subdir)
-        os.makedirs(subdir)
-        shutil.move(fpath, subdir + fname)
+    
+    fpaths = fix_fastq_file_names_if_needed(fpaths)
+    move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir)
 
     for fastq_dir_name in os.listdir(fastq_folders_dir):
         assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
@@ -193,14 +209,14 @@ def multiqc(fastq_root_dir):
     cmd = f'multiqc -d {fastq_root_dir} -o {multiqc_dir}'
     subprocess.run(cmd, shell=True)
 
-def combine_fastq_files_ac_thymus(rna_txs_dir, run_type):
+def combine_fastq_files_ac_thymus(rna_txs_dir):
     sample_dirs = [os.path.join(rna_txs_dir, x) + '/' for x in os.listdir(rna_txs_dir)]
     dirs_to_process = []
     for sample_dir in sample_dirs:
         if len([x for x in os.listdir(sample_dir) if 'L001_' in x]) > 0:
             dirs_to_process += [sample_dir]
 
-    if (len(dirs_to_process) == 0) | (run_type != 'ac_thymus'):
+    if (len(dirs_to_process) == 0):
         print('no combining of fastq files necessary')
         return
 
@@ -243,9 +259,8 @@ cfg = cfgs[run_type]
 threads = 10
 
 index_fpath = kallisto_build_index(cfg['ref_genome'])
-combine_fastq_files_ac_thymus(cfg['rna_txs'], run_type)
-# rename_fastq_files_and_store_each_in_own_subdir(cfg['rna_txs'])
-# fastqc(cfg['rna_txs'], threads)
+prep_fastq_files(cfg['rna_txs'], run_type)
+fastqc(cfg['rna_txs'], threads)
 # kallisto_quant(index_fpath, fastq_folders_dir, threads, seq_params)
 # multiqc(fastq_root_dir)
 
