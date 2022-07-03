@@ -235,9 +235,10 @@ def combine_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
             fpath_2 = get_single_lane_fastq_file_path(raw_sample_dir, 'L002_', read_type)
             os.makedirs(combined_sample_dir, exist_ok=True)
             combined_fpath = combined_sample_dir + os.path.basename(fpath_1).replace('L001_', '')
-            print(f'combining files {fpath_1} {fpath_2}')
             cmd = f'cat {fpath_1} {fpath_2} > {combined_fpath}'
             subprocess.run(cmd, shell=True)
+            assert os.path.getsize(combined_fpath) > 0
+            print(f'done combining files {fpath_1} {fpath_2}')
 
 
 ## Flow ##
