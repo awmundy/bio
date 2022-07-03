@@ -237,7 +237,6 @@ def combine_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
             combined_fpath = combined_sample_dir + os.path.basename(fpath_1).replace('L001_', '')
             print(f'combining files {fpath_1} {fpath_2}')
             cmd = f'cat {fpath_1} {fpath_2} > {combined_fpath}'
-            # print(cmd)
             subprocess.run(cmd, shell=True)
 
 
@@ -258,7 +257,7 @@ cfgs = \
         {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
          'ref_genome': '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
          'raw_rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/raw_rna_txs/' ,
-         'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/',
+         'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
           # todo figure out these (and other) params for the thymus data
          'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}}
         }
