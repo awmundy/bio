@@ -64,6 +64,7 @@ def prep_fastq_files(cfg, run_type):
     if run_type == 'ac_thymus':
         raw_rna_txs_dir = cfg['raw_rna_txs_dir']
         combine_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir)
+
     elif run_type == 'diyt':
         fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
         if len(fpaths) == 0:
@@ -133,10 +134,17 @@ def kallisto_build_index(ref_genome_fpath):
 
     return index_fpath
 
+def get_fastq_files_list_and_assert_n_files(sample_fastq_folder, expected_number_of_fastq_files):
+    fastq_files = [sample_fastq_folder + x for x in os.listdir(sample_fastq_folder) if x.endswith('.fastq.gz')]
+    assert len(fastq_files) == expected_number_of_fastq_files
+
+    return fastq_files
+
 
 def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
     """
-    Runs the kallisto quantification process on each fastq file in fastq_root_dir
+    Runs the kallisto quantification process on each fastq file (or files for paired reads) in each fastq folder
+    in the fastq_folders dir of rna_txs_dir
     params:
         threads: number of threads to use for EACH fastq file being processed. Multiple fastq files
                  are not multiprocessed; fastq files are iterated serially and multiprocessing is
@@ -150,35 +158,40 @@ def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
         run_info.json: metadata about the kallisto quant run
     """
     fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
-    fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
     # build list of fastq paths where kallisto quant hasnt been run yet
-    fastq_paths_where_kallisto_quant_is_needed = []
-    for fastq_path in fastq_paths:
-        fastq_dir = os.path.dirname(fastq_path) + '/'
-        if not os.path.exists(fastq_dir + 'abundance.h5'):
-            fastq_paths_where_kallisto_quant_is_needed += [fastq_path]
+    sample_fastq_folders_to_quant = []
+    sample_fastq_folder_labels = os.listdir(fastq_folders_dir)
+    for _dir in sample_fastq_folder_labels:
+        sample_fastq_folder = fastq_folders_dir + _dir + '/'
+        if not os.path.exists(sample_fastq_folder + 'abundance.h5'):
+            sample_fastq_folders_to_quant += [sample_fastq_folder]
 
-    if len(fastq_paths_where_kallisto_quant_is_needed) == 0:
-        print('kallisto quant already complete for all fastq files in', fastq_folders_dir)
+
+    if len(sample_fastq_folders_to_quant) == 0:
+        print('kallisto quant already complete for all fastq folders in', fastq_folders_dir)
         return
 
-    for fastq_path in fastq_paths_where_kallisto_quant_is_needed:
-        print('running kallisto quant on', fastq_path)
-
-        # save the output next to the fastq files
-        quant_out_dir = os.path.dirname(fastq_path) + '/'
+    for sample_fastq_folder in sample_fastq_folders_to_quant:
+        print('running kallisto quant on', sample_fastq_folder)
 
         cmd = (f"kallisto quant "
                f"-i {index_fpath} "
-               f"-o {quant_out_dir} "
-               f"-t {threads} "
-               f"-l {seq_params['frag_length']} "
-               f"-s {seq_params['frag_length_sd']} "
-               f"{seq_params['read_end_type']} "
-               f"{fastq_path}")
+               f"-o {sample_fastq_folder} " # output directory == fastq file(s) location
+               f"-t {threads} ")
 
-        log_path = quant_out_dir + 'kallisto_quant_log.log'
+        if seq_params['read_end_type'] == '--single':
+            fastq_files = get_fastq_files_list_and_assert_n_files(sample_fastq_folder, 1)
+            fastq_file_path = fastq_files[0]
+            cmd += seq_params['read_end_type'] + ' '
+            cmd += f"-l {seq_params['frag_length']} "
+            cmd += f"-s {seq_params['frag_length_sd']} "
+            cmd += fastq_file_path
+        elif seq_params['read_end_type'] == '--double':
+            fastq_files = get_fastq_files_list_and_assert_n_files(sample_fastq_folder, 2)
+            cmd += ' '.join(fastq_files)
+
+        log_path = sample_fastq_folder + 'kallisto_quant_log.log'
         # todo figure out how to print stuff out as it's running instead of once subprocess has completed
         with open(log_path, 'wb') as f:
             # capture both the stdout and stderr in one object
@@ -197,7 +210,6 @@ def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
                     f.write(line)
                 raise Exception('Kallisto quant process failed')
     print('done running kallisto quant')
-
 
 def multiqc(rna_txs_dir):
     '''multiqc looks for all relevant files in fastq_dir (i.e. all fastqc files, kallisto quant logs) and
@@ -260,7 +272,7 @@ cfgs = \
          'raw_rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/raw_rna_txs/' ,
          'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
           # todo figure out these (and other) params for the thymus data
-         'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}}
+         'seq_params': {'read_end_type': '--double'}}
         }
 
 run_type = 'ac_thymus'
