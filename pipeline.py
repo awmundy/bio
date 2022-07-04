@@ -47,6 +47,18 @@ def move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir):
         os.makedirs(subdir)
         shutil.move(fpath, subdir + fname)
 
+def prep_fastq_files_diyt(rna_txs_dir, fastq_folders_dir):
+    fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
+    if len(fpaths) == 0:
+        print('All fastq files already moved to their own subdir in', fastq_folders_dir)
+        return
+
+    fpaths = fix_fastq_file_names_if_needed(fpaths)
+    move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir)
+
+    for fastq_dir_name in os.listdir(fastq_folders_dir):
+        assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
+
 def prep_fastq_files(cfg, run_type):
     '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
     the fastq files/dirs have consistent file extensions
@@ -63,19 +75,13 @@ def prep_fastq_files(cfg, run_type):
 
     if run_type == 'ac_thymus':
         raw_rna_txs_dir = cfg['raw_rna_txs_dir']
-        combine_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir)
+        prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir)
 
     elif run_type == 'diyt':
-        fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
-        if len(fpaths) == 0:
-            print('All fastq files already moved to their own subdir in', fastq_folders_dir)
-            return
+        prep_fastq_files_diyt(rna_txs_dir, fastq_folders_dir)
 
-        fpaths = fix_fastq_file_names_if_needed(fpaths)
-        move_each_fastq_file_to_unique_dir(fpaths, fastq_folders_dir)
-
-        for fastq_dir_name in os.listdir(fastq_folders_dir):
-            assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
+    else:
+        raise Exception('Invalid run_type')
 
 def get_fastq_fpaths(_dir, ignore_fastq_folders_dir=False):
     """returns a list of all .fastq.gz files in the given _dir's subdirectories"""
@@ -229,26 +235,49 @@ def get_single_lane_fastq_file_path(raw_sample_dir, lane_label, read_type):
     assert os.path.exists(file_path)
     return file_path
 
-def combine_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
+def get_ac_thymus_sample_rename_map():
+    sample_rename = {'Sample_Thy_O_CX3pos1_IGO_11991_B_7': 'cx3_pos_old_1',
+                     'Sample_Thy_O_CX3pos2_IGO_11991_B_9': 'cx3_pos_old_2',
+                     'Sample_Thy_O_CX3pos3_IGO_11991_B_11': 'cx3_pos_old_3',
+                     'Sample_Thy_Y_CX3neg1_IGO_11991_B_2': 'cx3_neg_young_1',
+                     'Sample_Thy_Y_CX3neg2_IGO_11991_B_4': 'cx3_neg_young_2',
+                     'Sample_Thy_Y_CX3neg3_IGO_11991_B_6': 'cx3_neg_young_3',
+                     'Sample_Thy_Y_CX3pos1_IGO_11991_B_1': 'cx3_pos_young_1',
+                     'Sample_Thy_Y_CX3pos2_IGO_11991_B_3': 'cx3_pos_young_2'
+                     }
+    return sample_rename
+
+def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
+
+    sample_rename = get_ac_thymus_sample_rename_map()
 
     # create dict mapping raw file dir to combined file dir
     dirs_to_process = {}
-    for sample_label in os.listdir(raw_rna_txs_dir):
-        combined_dir = fastq_folders_dir + sample_label + '/'
-        if not os.path.exists(combined_dir):
-            dirs_to_process[raw_rna_txs_dir + sample_label + '/'] = combined_dir
+    for raw_sample_label in os.listdir(raw_rna_txs_dir):
+        # get new label for the sample folders and files
+        new_sample_label = sample_rename[raw_sample_label]
+        combined_sample_dir = fastq_folders_dir + new_sample_label + '/'
+        if not os.path.exists(combined_sample_dir):
+            dirs_to_process[new_sample_label] = {'raw_sample_dir': raw_rna_txs_dir + raw_sample_label + '/',
+                                                 'combined_sample_dir': combined_sample_dir}
     if (len(dirs_to_process) == 0):
         print('no combining of fastq files necessary')
         return
 
-    for raw_sample_dir, combined_sample_dir in dirs_to_process.items():
+    for new_sample_label, raw_and_combined_dirs in dirs_to_process.items():
         for read_type in ['R1', 'R2']:
+            raw_sample_dir = raw_and_combined_dirs['raw_sample_dir']
+            combined_sample_dir = raw_and_combined_dirs['combined_sample_dir']
+
             fpath_1 = get_single_lane_fastq_file_path(raw_sample_dir, 'L001_', read_type)
             fpath_2 = get_single_lane_fastq_file_path(raw_sample_dir, 'L002_', read_type)
+
             os.makedirs(combined_sample_dir, exist_ok=True)
-            combined_fpath = combined_sample_dir + os.path.basename(fpath_1).replace('L001_', '')
+            combined_fpath = combined_sample_dir + new_sample_label + '_' + read_type +'.fastq.gz'
+
             cmd = f'cat {fpath_1} {fpath_2} > {combined_fpath}'
             subprocess.run(cmd, shell=True)
+
             assert os.path.getsize(combined_fpath) > 0
             print(f'done combining files {fpath_1} {fpath_2}')
 
@@ -283,7 +312,7 @@ index_fpath = kallisto_build_index(cfg['ref_genome'])
 prep_fastq_files(cfg, run_type)
 fastqc(cfg['rna_txs_dir'], threads)
 kallisto_quant(index_fpath, cfg['rna_txs_dir'], threads, cfg['seq_params'])
-multiqc(cfg['rna_txs_dir'],)
+multiqc(cfg['rna_txs_dir'])
 
 # Thy_Y_CX3pos3_IGO_11991_B_5_S37_R1_001.fastq.gz
 #   - not in gzip format
