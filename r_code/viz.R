@@ -298,7 +298,6 @@ log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 # distance <- dist(t(log_cpm_filt_norm), method = "maximum")
 # clusters <- hclust(distance, method = "average") 
 # plot(clusters, labels=sample_labels)
-c
 
 pca <- prcomp(t(log_cpm_filt_norm), scale.=F, retx=T)
 summary(pca)
