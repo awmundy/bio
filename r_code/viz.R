@@ -58,23 +58,25 @@ add_row_descriptive_stats <- function(df, col_subset) {
 
 convert_tx_gene_mtx_to_tibble <- function(mtx, sample_labels) {
   # add column names that are the names of the samples
+  stopif(is.null(sample_labels))
   colnames(mtx) <- sample_labels
   df <- as_tibble(mtx, rownames = 'gene')
   return(df)
 }
 
-build_digital_gene_expression_list <- function(counts, sample_labels) {
+build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
   # @return A list containing a matrix of counts (same as what was passed in) 
   #         and a dataframe of samples containing the total count and a 
   #         normalization factor of 1
   
   # subset to sample labels cols only, and convert to matrix
-  dge_list <- DGEList(as.matrix(counts[, sample_labels]))  
+  dge_list <- DGEList(as.matrix(gene_counts[, sample_labels]))  
   return(dge_list)
 }
 
-build_log_cpm_df <- function(dge_list, long) {
-  # TODO write docstring
+build_log_cpm_df_old <- function(dge_list, long) {
+  # Construct a logged counts per million df
+  
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
   # convert gene_id to int for later libraries that require it
@@ -88,9 +90,47 @@ build_log_cpm_df <- function(dge_list, long) {
   return(log_cpm)
 }
 
-build_log_cpm_plot <- function(cpm_df, subtitle) {
+build_log_cpm_df <- function(dge_list, long) {
+  # Construct a logged counts per million df
+  
+  log_cpm <- cpm(dge_list, log=TRUE)
+  log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
+  # convert gene_id to int for later libraries that require it
+  log_cpm <- as_tibble(transform(log_cpm, gene_id=as.numeric(gene_id)))
+  if (long == TRUE) {
+    sample_cols <- colnames(log_cpm)
+    sample_cols <- all_of(sample_cols[-1])
+    log_cpm <- pivot_longer(log_cpm,
+                            cols = sample_cols,
+                            names_to = "sample_label",
+                            values_to = "expression")
+  }
+  return(log_cpm)
+}
+
+build_log_cpm_plot_old <- function(cpm_df, subtitle) {
   plt <- ggplot(cpm_df) +
     aes(x=samples, y=expression, fill=samples) +
+    geom_violin(trim = FALSE, show.legend = FALSE) +
+    stat_summary(fun = "median", 
+                 geom = "point", 
+                 shape = 95, 
+                 size = 10, 
+                 color = "black", 
+                 show.legend = FALSE) +
+    labs(y="log2 expression", x = "sample",
+         title="Log2 Counts per Million (CPM)",
+         subtitle=subtitle,
+         caption=paste0("produced on ", Sys.time())) +
+    theme_bw()
+  return(plt)
+}
+
+build_log_cpm_plot <- function(cpm_df, subtitle) {
+  stopifnot('sample_label' %in% colnames(cpm_df))
+  
+  plt <- ggplot(cpm_df) +
+    aes(x=sample_label, y=expression, fill=sample_label) +
     geom_violin(trim = FALSE, show.legend = FALSE) +
     stat_summary(fun = "median", 
                  geom = "point", 
@@ -131,7 +171,7 @@ get_gene_level_stats_dfs <- function(study_design, tx_to_gene_df) {
                               abundanceCol = 'tpm')
   sample_labels <- study_design$sample_label
   
-  # add column headersand convert to tibble
+  # add column headers and convert to tibble
   gene_counts <- convert_tx_gene_mtx_to_tibble(gene_stats_list$counts, 
                                                sample_labels)
   gene_lengths <- convert_tx_gene_mtx_to_tibble(gene_stats_list$length, 
@@ -142,14 +182,35 @@ get_gene_level_stats_dfs <- function(study_design, tx_to_gene_df) {
   return(list(gene_counts, gene_lengths, gene_abunds))
 }
 
-assign_abundance_paths_to_study_design <- function(study_design, 
+
+assign_abundance_paths_to_study_design_old <-
+  function(study_design,
+           abundance_paths) {
+    abundance_df <- data.frame(abundance_paths)
+    abundance_df$sample_label <-
+      str_replace(abundance_df$abundance_paths, abundance_root_dir, '')
+    abundance_df$sample_label <-
+      str_replace(abundance_df$sample_label, '/abundance.tsv', '')
+    
+    study_design <-
+      merge(study_design, abundance_df, by.x = 'sra_accession', 
+            by.y='sample_label', all = TRUE)
+    assert_col_not_null(study_design$abundance_paths)
+    
+    return(study_design)
+  }
+
+assign_abundance_paths_to_study_design <- function(study_design,
                                                    abundance_paths) {
   abundance_df <- data.frame(abundance_paths)
-  abundance_df$sample_label <- str_replace(abundance_df$abundance_paths, abundance_root_dir, '')
-  abundance_df$sample_label <- str_replace(abundance_df$sample_label, '/abundance.tsv', '')
+  abundance_df$sample_label <-
+    str_replace(abundance_df$abundance_paths, abundance_root_dir, '')
+  abundance_df$sample_label <-
+    str_replace(abundance_df$sample_label, '/abundance.tsv', '')
   
-  study_design <- merge(study_design, abundance_df, by='sample_label', all=TRUE)
-  assert_col_not_null(study_design$sample_label)
+  study_design <-
+    merge(study_design, abundance_df, by = 'sample_label', all = TRUE)
+  assert_col_not_null(study_design$abundance_paths)
   
   return(study_design)
 }
@@ -162,6 +223,13 @@ assert_col_not_null <- function(col) {
   stopif(any(is.na(col)))
   }
 
+get_study_design_df_old <- function(study_design_path) {
+  study_design <- read_csv(study_design_path, col_types = cols(.default = 'c'))
+  study_design <- dplyr::rename(study_design, sample_label = sample)
+  
+  return(study_design)
+}
+
 get_study_design_df <- function(study_design_path) {
   study_design <- read_csv(study_design_path, col_types = cols(.default = 'c'))
   assert_col_unique(study_design$sample_label)
@@ -173,20 +241,30 @@ stopif <- function(logic) {
   stopifnot(!logic)
 }
 
-abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
-study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
+
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
 # study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
-
-study_design <- get_study_design_df(study_design_path)
-
-# sample_labels <- study_design$sample
+# study_design <- get_study_design_df_old(study_design_path)
+# sample_labels <- study_design$sample_label
 # sra_accessions <- study_design$sra_accession
 # sample_groups <- study_design$group
-
 # abundance_paths <- get_abundance_paths_old(study_design, abundance_root_dir)
+# study_design <- assign_abundance_paths_to_study_design_old(study_design, abundance_paths)
 # tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Hsapiens.v86)
+# c(gene_counts, gene_lengths, gene_abunds) %<-% get_gene_level_stats_dfs(study_design, tx_to_gene_df)
+# dge_list <- build_digital_gene_expression_list(gene_counts, study_design$sample_label)
+# log_cpm_long <- build_log_cpm_df_old(dge_list, long = TRUE)
+
+
+
+
+abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
+study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
+
+
+study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
+
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -213,13 +291,14 @@ plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
 plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
 
 #TODO confirm this needs to be a factor
-sample_groups <- factor(sample_groups)
+# sample_groups <- factor(sample_groups)
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 
 #TODO probably just remove this, these objects are weird and the plot doesnt even work
-distance <- dist(t(log_cpm_filt_norm), method = "maximum") 
-clusters <- hclust(distance, method = "average") 
-plot(clusters, labels=sample_labels)
-
+# distance <- dist(t(log_cpm_filt_norm), method = "maximum")
+# clusters <- hclust(distance, method = "average") 
+# plot(clusters, labels=sample_labels)
+c
 
 pca <- prcomp(t(log_cpm_filt_norm), scale.=F, retx=T)
+summary(pca)
