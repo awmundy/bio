@@ -320,11 +320,67 @@ plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
 
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
+sample_cluster_plot <- build_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels)
 
-#TODO probably just remove this, these objects are weird and the plot doesnt even work
-# distance <- dist(t(log_cpm_filt_norm), method = "maximum")
-# clusters <- hclust(distance, method = "average") 
-# plot(clusters, labels=sample_labels)
 
-pca <- prcomp(t(log_cpm_filt_norm), scale.=F, retx=T)
-summary(pca)
+
+
+# todo generalize pca plot construction into function
+#  [-1] removes gene_id column
+pca <- prcomp(t(log_cpm_filt_norm[-1]), scale.=F, retx=T)
+# pca$rotation shows how much each gene influenced each PC (scores)
+pca_sum <- summary(pca)
+pca_var_pct <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
+# pca$x shows how much each sample influenced each PC (loadings)
+pca_loadings <- as_tibble(pca$x)
+population <- factor(study_design$population)
+age <- factor(study_design$age)
+
+
+p1 <- ggplot(pca_loadings) +
+	aes(x=PC1, y=PC2, label=sample_labels, 
+		color=population) +
+	geom_point(size=4) +
+	geom_label(nudge_y = 10) +
+	# stat_ellipse() +
+	xlab(paste0("PC1 (",pca_var_pct[1]*100,"%",")")) +
+	ylab(paste0("PC2 (",pca_var_pct[2]*100,"%",")")) +
+	labs(title="PCA plot",
+		 caption=paste0("produced on ", Sys.time())) +
+	coord_fixed() +
+	theme_bw()
+
+p2 <- ggplot(pca_loadings) +
+	aes(x=PC2, y=PC3, label=sample_labels, 
+		color=age) +
+	geom_point(size=4) +
+	geom_label(nudge_y = 10) +
+	# stat_ellipse() +
+	xlab(paste0("PC2 (",pca_var_pct[2]*100,"%",")")) +
+	ylab(paste0("PC3 (",pca_var_pct[3]*100,"%",")")) +
+	labs(title="PCA plot",
+		 caption=paste0("produced on ", Sys.time())) +
+	coord_fixed() +
+	theme_bw()
+
+plot_grid(p1, p2, 
+		  labels = c('PC1/2', 'PC2/3'), 
+		  label_size = 12
+		  )
+
+# TODO generalize into function and try different groupings
+pca_pivot <- pca_loadings[, 1:4]
+pca_pivot <- add_column(pca_pivot, sample=sample_labels, group=population)
+pca_pivot <- pivot_longer(pca_pivot,
+						  cols = PC1:PC4,
+						  names_to = "PC",
+						  values_to = "loadings")
+
+ggplot(pca_pivot) +
+	aes(x=sample, y=loadings, fill=group) + # you could iteratively 'paint' different covariates onto this plot using the 'fill' aes
+	geom_bar(stat="identity") +
+	facet_wrap(~PC) +
+	labs(title="PCA 'small multiples' plot",
+		 caption=paste0("produced on ", Sys.time())) +
+	theme_bw() +
+	coord_flip()
