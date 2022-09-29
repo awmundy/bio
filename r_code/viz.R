@@ -98,10 +98,9 @@ build_log_cpm_df <- function(dge_list, long) {
   # convert gene_id to int for later libraries that require it
   log_cpm <- as_tibble(transform(log_cpm, gene_id=as.numeric(gene_id)))
   if (long == TRUE) {
-    sample_cols <- colnames(log_cpm)
-    sample_cols <- all_of(sample_cols[-1])
+    sample_cols <- colnames(log_cpm)[-1]
     log_cpm <- pivot_longer(log_cpm,
-                            cols = sample_cols,
+                            cols = all_of(sample_cols),
                             names_to = "sample_label",
                             values_to = "expression")
   }
@@ -156,20 +155,20 @@ filter_dge_list <- function(dge_list, min_cpm, min_samples_with_min_cpm) {
   return(dge_list)
 }
 
-get_gene_level_stats_dfs <- function(study_design, tx_to_gene_df) {
+
+get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_df) {
   # params
   # abundance_paths: c vector of paths of abundance files
   # tx_to_gene_df: df mapping a transcript identifier to a gene name
   
   # get list of matrixes summarizing information across the data in abundance_paths
-  gene_stats_list <- tximport(file = study_design$abundance_paths,
+  gene_stats_list <- tximport(file = abundance_paths,
                               type = "kallisto",
                               tx2gene = tx_to_gene_df,
                               txOut = FALSE, # false means gene level, not tx level
                               countsFromAbundance = "lengthScaledTPM",
                               ignoreTxVersion = TRUE,
                               abundanceCol = 'tpm')
-  sample_labels <- study_design$sample_label
   
   # add column headers and convert to tibble
   gene_counts <- convert_tx_gene_mtx_to_tibble(gene_stats_list$counts, 
@@ -181,7 +180,6 @@ get_gene_level_stats_dfs <- function(study_design, tx_to_gene_df) {
   
   return(list(gene_counts, gene_lengths, gene_abunds))
 }
-
 
 assign_abundance_paths_to_study_design_old <-
   function(study_design,
@@ -203,14 +201,15 @@ assign_abundance_paths_to_study_design_old <-
 assign_abundance_paths_to_study_design <- function(study_design,
                                                    abundance_paths) {
   abundance_df <- data.frame(abundance_paths)
+  abundance_df <-  dplyr::rename(abundance_df, abundance_path = abundance_paths)
   abundance_df$sample_label <-
-    str_replace(abundance_df$abundance_paths, abundance_root_dir, '')
+    str_replace(abundance_df$abundance_path, abundance_root_dir, '')
   abundance_df$sample_label <-
     str_replace(abundance_df$sample_label, '/abundance.tsv', '')
   
   study_design <-
     merge(study_design, abundance_df, by = 'sample_label', all = TRUE)
-  assert_col_not_null(study_design$abundance_paths)
+  assert_col_not_null(study_design$abundance_path)
   
   return(study_design)
 }
@@ -241,6 +240,34 @@ stopif <- function(logic) {
   stopifnot(!logic)
 }
 
+convert_tibble_to_mtx <- function(tbl, row_names_col) {
+	mtx <- as.matrix(tbl)
+	
+	# set rownames
+	row.names(mtx) = mtx[, row_names_col]
+	
+	# remove row name col
+	mtx <- mtx[, ! colnames(mtx) %in% c(row_names_col)]
+	return(mtx)
+}
+
+build_cluster_dendogram_plot <- function(tbl, sample_labels)
+	# constructs a dendogram plot for a gene level dataset where the headers
+	# are sample_labels
+	
+	# build matrix since distance function requires is
+	mtx <- convert_tibble_to_mtx(tbl, "gene_id")
+stopifnot(setequal(colnames(mtx), sample_labels))
+
+# calc distance between samples
+distance <- dist(t(mtx), method = "maximum")
+# agglomeration
+clusters <- hclust(distance, method = "average")
+# build dendogram 
+# QC check:	neg and pos samples should be grouped with themselves
+plt <- plot(clusters, labels=sample_labels)
+
+return(plt)
 
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
 # study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
@@ -261,20 +288,21 @@ stopif <- function(logic) {
 abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
 study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
 
-
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
-
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
+sample_labels <- study_design$sample_label
+abundance_paths <- study_design$abundance_path
 
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
-c(gene_counts, gene_lengths, gene_abunds) %<-% get_gene_level_stats_dfs(study_design, tx_to_gene_df)
+c(gene_counts, gene_lengths, gene_abunds) %<-% 
+	get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
 
 #TODO build some sort of relevant plot for these abundances
-# gene_abunds <- add_row_descriptive_stats(gene_abunds, study_design$sample_label)
+# gene_abunds <- add_row_descriptive_stats(gene_abunds, sample_labels)
 
-dge_list <- build_digital_gene_expression_list(gene_counts, study_design$sample_label)
+dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
 log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 
 dge_list_filt <- filter_dge_list(dge_list,
@@ -290,8 +318,7 @@ plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
 plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
 plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
 
-#TODO confirm this needs to be a factor
-# sample_groups <- factor(sample_groups)
+
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 
 #TODO probably just remove this, these objects are weird and the plot doesnt even work
