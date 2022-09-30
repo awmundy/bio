@@ -6,8 +6,9 @@ suppressPackageStartupMessages({
   library(EnsDb.Hsapiens.v86)
   library(edgeR)
   library(matrixStats)
-  library(cowplot)
+  library(gridExtra)
   library(zeallot)
+  library(cowplot)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -251,23 +252,127 @@ convert_tibble_to_mtx <- function(tbl, row_names_col) {
 	return(mtx)
 }
 
-build_cluster_dendogram_plot <- function(tbl, sample_labels)
-	# constructs a dendogram plot for a gene level dataset where the headers
-	# are sample_labels
+write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
+	## writes a dendogram cluster  plot for a gene level dataset where 
+	##	the headers are sample_labels
 	
 	# build matrix since distance function requires is
 	mtx <- convert_tibble_to_mtx(tbl, "gene_id")
-stopifnot(setequal(colnames(mtx), sample_labels))
+	stopifnot(setequal(colnames(mtx), sample_labels))
+	
+	# calc distance between samples
+	distance <- dist(t(mtx), method = "maximum")
+	# agglomeration
+	clusters <- hclust(distance, method = "average")
+	
+	# build dendogram and write
+	pdf(cluster_out_path)
+	plot(clusters, labels=sample_labels)
+	dev.off()
+	
+}
+ 
+write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
+									study_design, pca_out_path) {
+	pca_var_pct <- pca_metrics[[1]]
+	pca_loadings <- pca_metrics[[2]]
+	
+	plot_list = list()
+	for(sample_dimension in sample_dimensions) {
+		# build factor for coloring
+		sample_dimension_factor <- factor(study_design[, sample_dimension])
+		
+		# use just odd elements of range so that PCs aren't repeated across plots
+		for(i in seq(1, 6, 2)) {
+			first_pc_label = paste('PC', i, sep='')
+			second_pc_label = paste('PC', i + 1, sep='')
+			
+			plt <- ggplot(pca_loadings) +
+				aes(x=get(first_pc_label), y=get(second_pc_label),
+					label=sample_labels, color=sample_dimension_factor) +
+				geom_point(size=4) +
+				# geom_label(nudge_y = 10) +
+				xlab(paste0(first_pc_label, "(", pca_var_pct[i]*100,"%",")")) +
+				ylab(paste0(second_pc_label, "(", pca_var_pct[i + 1]*100,"%",")")) +
+				labs(title="PCA plot",
+					 caption=paste0("produced on ", Sys.time())) +
+				coord_fixed() +
+				# overwrites legend title to be the actual dimension label
+				guides(color=guide_legend(sample_dimension))
+			theme_bw()
+			
+			# print plt so that recordPlot can capture it
+			print(plt)
+			plot_list[[paste(i, sample_dimension, sep='')]] <- recordPlot()
+		}}
+	
+	# write out
+	pdf(pca_out_path, onefile=TRUE, width=4, height=4)
+	for (plt in plot_list) {
+		replayPlot(plt)
+	}
+	graphics.off()
+}
 
-# calc distance between samples
-distance <- dist(t(mtx), method = "maximum")
-# agglomeration
-clusters <- hclust(distance, method = "average")
-# build dendogram 
-# QC check:	neg and pos samples should be grouped with themselves
-plt <- plot(clusters, labels=sample_labels)
+get_pca_metrics <- function(log_cpm_filt_norm) {
+	## Performs Principal Component Analysis on genetic counts per million
+	##	sample data
+	## Returns: 
+	##	pca_var_pct: numeric series like object with pct variance described
+	##				 by each PC
+	##	pca_loadings: tibble, shows how much each sample influenced each PC
+	
+	#  [-1] removes gene_id column
+	pca <- prcomp(t(log_cpm_filt_norm[-1]), scale.=F, retx=T)
+	pca_sum <- summary(pca)
+	pca_var_pct <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
+	pca_loadings <- as_tibble(pca$x)
+	
+	return(list(pca_var_pct, pca_loadings))
+}
 
-return(plt)
+write_pca_small_multiples_plots <- function(pca_metrics,
+											sample_dimensions,
+											study_design,
+											sample_labels,
+											pca_small_multiples_out_path) {
+	pca_loadings <- pca_metrics[[2]][, 1:6]
+	plot_list = list()
+	for (sample_dimension in sample_dimensions) {
+		sample_dim_vals <- study_design[, sample_dimension]
+		# prep and pivot long
+		pca_pivot <- add_column(pca_loadings, sample = sample_labels,
+								group = sample_dim_vals)
+		pca_pivot <- pivot_longer(
+			pca_pivot,
+			cols = PC1:PC6,
+			names_to = "PC",
+			values_to = "loadings"
+		)
+		
+		# build small multiples plot
+		plt <- ggplot(pca_pivot) +
+			aes(x = sample,
+				y = loadings,
+				fill = group) +
+			geom_bar(stat = "identity") +
+			facet_wrap( ~ PC) +
+			labs(title = "PCA small multiples plot",
+				 caption = paste0("produced on ", Sys.time())) +
+			theme_bw() +
+			coord_flip() +
+			guides(color = guide_legend(sample_dimension))
+		# print plt so that recordPlot can capture it
+		print(plt)
+		plot_list[[sample_dimension]] <- recordPlot()
+	}
+	
+	pdf(pca_small_multiples_out_path, onefile = TRUE)
+	for (plt in plot_list) {
+		replayPlot(plt)
+	}
+	graphics.off()
+}
 
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
 # study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
@@ -283,16 +388,22 @@ return(plt)
 # log_cpm_long <- build_log_cpm_df_old(dge_list, long = TRUE)
 
 
-
+.pardefault <- par()
 
 abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
 study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
+pca_scatter_out_path <- "/home/amundy/Desktop/pca_scatter.pdf"
+pca_small_multiples_out_path <- "/home/amundy/Desktop/pca_small_multiples.pdf"
+cluster_out_path <- "/home/amundy/Desktop/cluster.pdf"
 
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 sample_labels <- study_design$sample_label
+population <- study_design$population
 abundance_paths <- study_design$abundance_path
+sample_dimensions <- c('population', 'age')
+
 
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
@@ -320,67 +431,11 @@ plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
 
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
-sample_cluster_plot <- build_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels)
+write_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels, cluster_out_path)
+
+pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
+write_pca_scatter_plots(pca_metrics, sample_dimensions, study_design, pca_scatter_out_path)
+write_pca_small_multiples_plots(pca_metrics, sample_dimensions, study_design,
+								sample_labels, pca_small_multiples_out_path)
 
 
-
-
-# todo generalize pca plot construction into function
-#  [-1] removes gene_id column
-pca <- prcomp(t(log_cpm_filt_norm[-1]), scale.=F, retx=T)
-# pca$rotation shows how much each gene influenced each PC (scores)
-pca_sum <- summary(pca)
-pca_var_pct <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
-# pca$x shows how much each sample influenced each PC (loadings)
-pca_loadings <- as_tibble(pca$x)
-population <- factor(study_design$population)
-age <- factor(study_design$age)
-
-
-p1 <- ggplot(pca_loadings) +
-	aes(x=PC1, y=PC2, label=sample_labels, 
-		color=population) +
-	geom_point(size=4) +
-	geom_label(nudge_y = 10) +
-	# stat_ellipse() +
-	xlab(paste0("PC1 (",pca_var_pct[1]*100,"%",")")) +
-	ylab(paste0("PC2 (",pca_var_pct[2]*100,"%",")")) +
-	labs(title="PCA plot",
-		 caption=paste0("produced on ", Sys.time())) +
-	coord_fixed() +
-	theme_bw()
-
-p2 <- ggplot(pca_loadings) +
-	aes(x=PC2, y=PC3, label=sample_labels, 
-		color=age) +
-	geom_point(size=4) +
-	geom_label(nudge_y = 10) +
-	# stat_ellipse() +
-	xlab(paste0("PC2 (",pca_var_pct[2]*100,"%",")")) +
-	ylab(paste0("PC3 (",pca_var_pct[3]*100,"%",")")) +
-	labs(title="PCA plot",
-		 caption=paste0("produced on ", Sys.time())) +
-	coord_fixed() +
-	theme_bw()
-
-plot_grid(p1, p2, 
-		  labels = c('PC1/2', 'PC2/3'), 
-		  label_size = 12
-		  )
-
-# TODO generalize into function and try different groupings
-pca_pivot <- pca_loadings[, 1:4]
-pca_pivot <- add_column(pca_pivot, sample=sample_labels, group=population)
-pca_pivot <- pivot_longer(pca_pivot,
-						  cols = PC1:PC4,
-						  names_to = "PC",
-						  values_to = "loadings")
-
-ggplot(pca_pivot) +
-	aes(x=sample, y=loadings, fill=group) + # you could iteratively 'paint' different covariates onto this plot using the 'fill' aes
-	geom_bar(stat="identity") +
-	facet_wrap(~PC) +
-	labs(title="PCA 'small multiples' plot",
-		 caption=paste0("produced on ", Sys.time())) +
-	theme_bw() +
-	coord_flip()
