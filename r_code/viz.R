@@ -428,10 +428,10 @@ log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
 log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
 
-plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
-plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
-plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
-plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
+# plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
+# plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
+# plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
+# plot_grid(plt_1, plt_2, plt_3, labels = c('A', 'B', 'C'), label_size = 12)
 
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
