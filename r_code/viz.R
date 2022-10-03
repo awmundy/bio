@@ -312,7 +312,7 @@ write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 	graphics.off()
 }
 
-get_pca_metrics <- function(log_cpm_filt_norm) {
+get_pca_metrics <- function(cpm_matrix) {
 	## Performs Principal Component Analysis on genetic counts per million
 	##	sample data
 	## Returns: 
@@ -321,7 +321,7 @@ get_pca_metrics <- function(log_cpm_filt_norm) {
 	##	pca_loadings: tibble, shows how much each sample influenced each PC
 	
 	#  [-1] removes gene_id column
-	pca <- prcomp(t(log_cpm_filt_norm[-1]), scale.=F, retx=T)
+	pca <- prcomp(t(cpm_matrix[-1]), scale.=F, retx=T)
 	pca_sum <- summary(pca)
 	pca_var_pct <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
 	pca_loadings <- as_tibble(pca$x)
