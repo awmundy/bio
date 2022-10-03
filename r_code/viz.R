@@ -1,14 +1,15 @@
 suppressPackageStartupMessages({
-  library(tidyverse)
-  library(tximport)
-  library(ensembldb)
-  library(EnsDb.Mmusculus.v79)
-  library(EnsDb.Hsapiens.v86)
-  library(edgeR)
-  library(matrixStats)
-  library(gridExtra)
-  library(zeallot)
-  library(cowplot)
+	library(tidyverse)
+	library(tximport)
+	library(ensembldb)
+	library(EnsDb.Mmusculus.v79)
+	library(EnsDb.Hsapiens.v86)
+	library(edgeR)
+	library(matrixStats)
+	library(gridExtra)
+	library(zeallot)
+	library(cowplot)
+	library(rhdf5)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -96,8 +97,7 @@ build_log_cpm_df <- function(dge_list, long) {
   
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
-  # convert gene_id to int for later libraries that require it
-  log_cpm <- as_tibble(transform(log_cpm, gene_id=as.numeric(gene_id)))
+
   if (long == TRUE) {
     sample_cols <- colnames(log_cpm)[-1]
     log_cpm <- pivot_longer(log_cpm,
@@ -155,7 +155,6 @@ filter_dge_list <- function(dge_list, min_cpm, min_samples_with_min_cpm) {
   dge_list <- dge_list[msk, ]
   return(dge_list)
 }
-
 
 get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_df) {
   # params
@@ -269,9 +268,8 @@ write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
 	pdf(cluster_out_path)
 	plot(clusters, labels=sample_labels)
 	dev.off()
-	
 }
- 
+
 write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 									study_design, pca_out_path) {
 	pca_var_pct <- pca_metrics[[1]]
