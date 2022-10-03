@@ -272,13 +272,15 @@ write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
 
 write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 									study_design, pca_out_path) {
+	sample_labels <- study_design$sample_label
 	pca_var_pct <- pca_metrics[[1]]
 	pca_loadings <- pca_metrics[[2]]
-	
 	plot_list = list()
 	for(sample_dimension in sample_dimensions) {
 		# build factor for coloring
 		sample_dimension_factor <- factor(study_design[, sample_dimension])
+		# length 1 means factor failed, e.g. doesn't work on tibbles
+		stopif(length(sample_dimension_factor) == 1)
 		
 		# use just odd elements of range so that PCs aren't repeated across plots
 		for(i in seq(1, 6, 2)) {
