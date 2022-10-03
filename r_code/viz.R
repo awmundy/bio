@@ -151,7 +151,7 @@ filter_dge_list <- function(dge_list, min_cpm, min_samples_with_min_cpm) {
   #   is a sample
   cpm_mtx <- cpm(dge_list)
   # filter dge_list 
-  msk <- rowSums(cpm_mtx > min_cpm) >= min_samples_with_min_cpm
+  msk <- rowSums(cpm_mtx >= min_cpm) >= min_samples_with_min_cpm
   dge_list <- dge_list[msk, ]
   return(dge_list)
 }
@@ -417,7 +417,7 @@ dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
 log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 
 dge_list_filt <- filter_dge_list(dge_list,
-                                 min_cpm = 1,
+                                 min_cpm = 2,
                                  min_samples_with_min_cpm = 5)
 log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
 
