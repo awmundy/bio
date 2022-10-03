@@ -332,9 +332,11 @@ get_pca_metrics <- function(cpm_matrix) {
 write_pca_small_multiples_plots <- function(pca_metrics,
 											sample_dimensions,
 											study_design,
-											sample_labels,
 											pca_small_multiples_out_path) {
+	
+	sample_labels <- study_design$sample_label
 	pca_loadings <- pca_metrics[[2]][, 1:6]
+	
 	plot_list = list()
 	for (sample_dimension in sample_dimensions) {
 		sample_dim_vals <- study_design[, sample_dimension]
@@ -392,6 +394,8 @@ abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders
 study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
 pca_scatter_out_path <- "/home/amundy/Desktop/pca_scatter.pdf"
 pca_small_multiples_out_path <- "/home/amundy/Desktop/pca_small_multiples.pdf"
+pca_scatter_ext_out_path <- "/home/amundy/Desktop/pca_scatter_ext.pdf"
+pca_small_multiples_ext_out_path <- "/home/amundy/Desktop/pca_small_multiples_ext.pdf"
 cluster_out_path <- "/home/amundy/Desktop/cluster.pdf"
 
 study_design <- get_study_design_df(study_design_path)
@@ -434,6 +438,52 @@ write_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels, cluster_out_path)
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 write_pca_scatter_plots(pca_metrics, sample_dimensions, study_design, pca_scatter_out_path)
 write_pca_small_multiples_plots(pca_metrics, sample_dimensions, study_design,
-								sample_labels, pca_small_multiples_out_path)
+								pca_small_multiples_out_path)
+
+mouse_archs4_rnaseq_path = '/home/amundy/Documents/archs4_rnaseq/mouse_matrix_v10.h5'
+# h5ls(mouse_archs4_rnaseq_path)
+all_arch_sample_geos <- h5read(mouse_archs4_rnaseq_path, name="meta/samples/geo_accession")
+ext_sample_geos <- c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945", "GSM2310946", "GSM2310947", "GSM2310948", "GSM2310949", "GSM2310950", "GSM2310951", "GSM2310952")
+ext_idxs <- which(all_arch_sample_geos %in% ext_sample_geos)
+
+ext_sample_source_name <- 
+	h5read(mouse_archs4_rnaseq_path, "meta/samples/source_name_ch1")[ext_idxs]
+ext_sample_labels <- 
+	h5read(mouse_archs4_rnaseq_path, name="meta/samples/title")[ext_idxs]
+#TODO consider trying to automate the production of these, but dont do it prematurely
+# These are derived from the title in this case, but it varies where to find them
+ext_sample_population <- c("WT", "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8", "WT", "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8")
+ext_sample_treatment <- c("unstim", "unstim", "unstim", "unstim", "unstim", "unstim", "LPS", "LPS", "LPS", "LPS", "LPS", "LPS")
+
+ext_study_design <- data.frame(
+	population = ext_sample_population,
+	treatment = ext_sample_treatment,
+	sample_label = ext_sample_labels,
+	source_name = ext_sample_source_name
+)
+
+gene_ids <- h5read(mouse_archs4_rnaseq_path, "meta/genes/gene_symbol")
+
+# get gene expressions, wide by sample, then transcribe and add col/rownames
+expression <- h5read(mouse_archs4_rnaseq_path, "data/expression", 
+					 index=list(ext_idxs, 1:length(gene_ids)))
+expression <- t(expression)
+rownames(expression) <- gene_ids
+colnames(expression) <- all_arch_sample_geos[ext_idxs]
+ext_dge_list <- DGEList(expression)
+ext_dge_list <- filter_dge_list(ext_dge_list,
+								min_cpm = 2,
+								min_samples_with_min_cpm = 2)
+
+ext_dge_list <- calcNormFactors(ext_dge_list, method = "TMM")
+ext_cpm <- build_log_cpm_df(ext_dge_list, long = FALSE)
+
+ext_pca_metrics <- get_pca_metrics(ext_cpm)
+write_pca_scatter_plots(ext_pca_metrics, c('population', 'treatment'), 
+						ext_study_design, pca_scatter_ext_out_path)
+write_pca_small_multiples_plots(ext_pca_metrics, c('population', 'treatment'), 
+								ext_study_design, pca_small_multiples_ext_out_path)
+
+
 
 
