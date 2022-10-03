@@ -298,7 +298,7 @@ write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 					 caption=paste0("produced on ", Sys.time())) +
 				coord_fixed() +
 				# overwrites legend title to be the actual dimension label
-				guides(color=guide_legend(sample_dimension))
+				guides(color=guide_legend(sample_dimension)) +
 			theme_bw()
 			
 			# print plt so that recordPlot can capture it
