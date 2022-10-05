@@ -157,9 +157,14 @@ filter_dge_list <- function(dge_list, min_cpm, min_samples_with_min_cpm) {
 }
 
 get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_df) {
-  # params
-  # abundance_paths: c vector of paths of abundance files
-  # tx_to_gene_df: df mapping a transcript identifier to a gene name
+	# params:
+	# abundance_paths: c vector of paths of abundance files
+	# tx_to_gene_df: df mapping a transcript identifier to a gene name
+	# returns:
+	# gene_counts: count of genes aggregated from txs- not exactly equal to 
+	#			   a million- possibly bc some txs don't have a gene in the reference?
+	# gene_lengths
+	# gene_abunds
   
   # get list of matrixes summarizing information across the data in abundance_paths
   gene_stats_list <- tximport(file = abundance_paths,
@@ -418,13 +423,14 @@ c(gene_counts, gene_lengths, gene_abunds) %<-%
 # gene_abunds <- add_row_descriptive_stats(gene_abunds, sample_labels)
 
 dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
-log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
+# log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 
 dge_list_filt <- filter_dge_list(dge_list,
                                  min_cpm = 2,
                                  min_samples_with_min_cpm = 5)
-log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
+# log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
 
+# adjusts norm factors in dge list samples df, allows comparison across samples
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
 log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
 
@@ -442,7 +448,7 @@ write_pca_scatter_plots(pca_metrics, sample_dimensions, study_design, pca_scatte
 write_pca_small_multiples_plots(pca_metrics, sample_dimensions, study_design,
 								pca_small_multiples_out_path)
 
-mouse_archs4_rnaseq_path = '/home/amundy/Documents/archs4_rnaseq/mouse_matrix_v10.h5'
+mouse_archs4_rnaseq_path = '/media/amundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
 # h5ls(mouse_archs4_rnaseq_path)
 all_arch_sample_geos <- h5read(mouse_archs4_rnaseq_path, name="meta/samples/geo_accession")
 ext_sample_geos <- c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945", "GSM2310946", "GSM2310947", "GSM2310948", "GSM2310949", "GSM2310950", "GSM2310951", "GSM2310952")
