@@ -381,6 +381,24 @@ write_pca_small_multiples_plots <- function(pca_metrics,
 	graphics.off()
 }
 
+describe <- function(df_col) {
+	min_val <- min(df_col)
+	max_val <- max(df_col)
+	mean_val <- mean(df_col)
+	q5 <- quantile(df_col, 0.05)
+	q10 <- quantile(df_col, 0.10)
+	q25 <- quantile(df_col, 0.25)
+	q50 <- quantile(df_col, 0.50)
+	q75 <- quantile(df_col, 0.75)
+	q90 <- quantile(df_col, 0.90)
+	q95 <- quantile(df_col, 0.95)
+	out <- data.frame(min=min_val, max=max_val, mean=mean_val, 
+					  q5=q5, q10=q10, q25=q25, q50=q50, q75=q75, 
+					  q90=q90, q95=q95, row.names = NULL)
+	out <- t(out)
+	return(out)
+}
+
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
 # study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
 # study_design <- get_study_design_df_old(study_design_path)
