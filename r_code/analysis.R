@@ -450,7 +450,7 @@ dge_list_filt <- filter_dge_list(dge_list,
 
 # adjusts norm factors in dge list samples df, allows comparison across samples
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
-log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
+# log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
 
 # plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
 # plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
@@ -509,7 +509,5 @@ write_pca_scatter_plots(ext_pca_metrics, c('population', 'treatment'),
 						ext_study_design, pca_scatter_ext_out_path)
 write_pca_small_multiples_plots(ext_pca_metrics, c('population', 'treatment'), 
 								ext_study_design, pca_small_multiples_ext_out_path)
-
-
 
 
