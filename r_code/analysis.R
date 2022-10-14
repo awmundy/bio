@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 	library(zeallot)
 	library(cowplot)
 	library(rhdf5)
+	library(limma)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -278,8 +279,8 @@ write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
 write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 									study_design, pca_out_path) {
 	sample_labels <- study_design$sample_label
-	pca_var_pct <- pca_metrics[[1]]
-	pca_loadings <- pca_metrics[[2]]
+	# pca_var_pct <- pca_metrics[[1]]
+	# pca_loadings <- pca_metrics[[2]]
 	plot_list = list()
 	for(sample_dimension in sample_dimensions) {
 		# build factor for coloring
@@ -292,13 +293,13 @@ write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 			first_pc_label = paste('PC', i, sep='')
 			second_pc_label = paste('PC', i + 1, sep='')
 			
-			plt <- ggplot(pca_loadings) +
+			plt <- ggplot(pca_metrics$scores) +
 				aes(x=get(first_pc_label), y=get(second_pc_label),
 					label=sample_labels, color=sample_dimension_factor) +
 				geom_point(size=4) +
 				# geom_label(nudge_y = 10) +
-				xlab(paste0(first_pc_label, "(", pca_var_pct[i]*100,"%",")")) +
-				ylab(paste0(second_pc_label, "(", pca_var_pct[i + 1]*100,"%",")")) +
+				xlab(paste0(first_pc_label, "(", pca_metrics$var_explained[i]*100,"%",")")) +
+				ylab(paste0(second_pc_label, "(", pca_metrics$var_explained[i + 1]*100,"%",")")) +
 				labs(title="PCA plot",
 					 caption=paste0("produced on ", Sys.time())) +
 				coord_fixed() +
@@ -323,17 +324,24 @@ get_pca_metrics <- function(cpm_matrix) {
 	## Performs Principal Component Analysis on genetic counts per million
 	##	sample data
 	## Returns: 
-	##	pca_var_pct: numeric series like object with pct variance described
+	##	variance explained: numeric series like object with pct variance described
 	##				 by each PC
-	##	pca_loadings: tibble, shows how much each sample influenced each PC
+	##	scores: tibble, shows how much each sample influenced each PC
+	##  loadings: show much each variable (gene) influenced each PC
 	
 	#  [-1] removes gene_id column
 	pca <- prcomp(t(cpm_matrix[-1]), scale.=F, retx=T)
 	pca_sum <- summary(pca)
-	pca_var_pct <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
-	pca_loadings <- as_tibble(pca$x)
+	var_explained <- as.data.frame(t(pca_sum$importance))$'Proportion of Variance'
+	scores <- as_tibble(pca$x)
+	loadings <- pca$rotation
 	
-	return(list(pca_var_pct, pca_loadings))
+	pca_metrics <- list(var_explained = var_explained,
+						loadings = loadings,
+						scores = scores
+						)
+	
+	return(pca_metrics)
 }
 
 write_pca_small_multiples_plots <- function(pca_metrics,
@@ -342,25 +350,25 @@ write_pca_small_multiples_plots <- function(pca_metrics,
 											pca_small_multiples_out_path) {
 	
 	sample_labels <- study_design$sample_label
-	pca_loadings <- pca_metrics[[2]][, 1:6]
+	scores <- pca_metrics$scores[, 1:6]
 	
 	plot_list = list()
 	for (sample_dimension in sample_dimensions) {
 		sample_dim_vals <- study_design[, sample_dimension]
 		# prep and pivot long
-		pca_pivot <- add_column(pca_loadings, sample = sample_labels,
+		pca_pivot <- add_column(scores, sample = sample_labels,
 								group = sample_dim_vals)
 		pca_pivot <- pivot_longer(
 			pca_pivot,
 			cols = PC1:PC6,
 			names_to = "PC",
-			values_to = "loadings"
+			values_to = "scores"
 		)
 		
 		# build small multiples plot
 		plt <- ggplot(pca_pivot) +
 			aes(x = sample,
-				y = loadings,
+				y = scores,
 				fill = group) +
 			geom_bar(stat = "identity") +
 			facet_wrap( ~ PC) +
@@ -411,9 +419,6 @@ describe <- function(df_col) {
 # c(gene_counts, gene_lengths, gene_abunds) %<-% get_gene_level_stats_dfs(study_design, tx_to_gene_df)
 # dge_list <- build_digital_gene_expression_list(gene_counts, study_design$sample_label)
 # log_cpm_long <- build_log_cpm_df_old(dge_list, long = TRUE)
-
-
-.pardefault <- par()
 
 abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
 study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
@@ -509,5 +514,9 @@ write_pca_scatter_plots(ext_pca_metrics, c('population', 'treatment'),
 						ext_study_design, pca_scatter_ext_out_path)
 write_pca_small_multiples_plots(ext_pca_metrics, c('population', 'treatment'), 
 								ext_study_design, pca_small_multiples_ext_out_path)
+
+age_factor <- factor(study_design$age)
+design <- model.matrix(age_factor)
+colnames(design) <- levels(age_factor)
 
 
