@@ -11,6 +11,8 @@ suppressPackageStartupMessages({
 	library(cowplot)
 	library(rhdf5)
 	library(limma)
+	library(gt)
+	library(plotly)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -494,6 +496,26 @@ write_external_sample_pca <- function(ext_data, pca_scatter_ext_out_path,
 									pca_small_multiples_ext_out_path)
 }
 
+get_design_matrix <- function(study_design, has_intercept, 
+							  explanatory_variable) {
+	variable_factor <- factor(study_design[, explanatory_variable])
+	if (has_intercept == TRUE) {
+		design_matrix <- model.matrix(variable_factor)
+	} else {
+		design_matrix <- model.matrix(~0 + variable_factor)
+	}
+	
+	# interaction
+	# design_matrix <- model.matrix(~age_factor*population_factor)
+	# additive
+	# design_matrix <- model.matrix(~age_factor + population_factor)
+	
+	# better column names
+	prefix <- paste(explanatory_variable, '_', sep='')
+	colnames(design_matrix) <- sub("variable_factor", prefix, colnames(design_matrix))
+	
+	return(design_matrix)
+}
 
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
 # study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
@@ -537,6 +559,7 @@ sample_labels <- study_design$sample_label
 population <- study_design$population
 abundance_paths <- study_design$abundance_path
 sample_dimensions <- c('population', 'age')
+explanatory_variable <- c('population')
 
 
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -571,10 +594,51 @@ ext_data <- get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
 write_external_sample_pca(ext_data, pca_scatter_ext_out_path,
 						  pca_small_multiples_ext_out_path)
 
+design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 
-age_factor <- factor(study_design$age)
-# ~0 is no intercept
-design <- model.matrix(~0 + age_factor)
-colnames(design) <- levels(age_factor)
+# variance stabilize the counts
+# voom requires the input to be counts, not CPM, TPM etc
+elist <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
 
+# builds a linear model with coefficients for each column in design matrix
+# each row is a gene, each value is the average of the transformed 
+# counts from voom for that category/gene combo, if explanatory variables 
+# are factors
+linear_fit <- lmFit(elist, design_matrix)
+
+# compare coefficients across the categories
+# contrast_matrix <- makeContrasts(age_delta=age_old-age_young,
+								 # levels=design_matrix)
+contrast_matrix <- makeContrasts(cx3_effect=population_cx3_pos-population_cx3_neg,
+								 levels=design_matrix)
+
+# coefficients here are the differences between the coefficients of the categories
+contrast_fit <- contrasts.fit(linear_fit, contrast_matrix)
+
+# uses empirical bayes method to produce p values showing whether each gene
+# has a log fold change greater than 0
+bayes_fit <- eBayes(contrast_fit)
+
+# adjust p values and get dataframe of genes sorted by abs log fold change
+deg <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
+deg <- as_tibble(deg, rownames='gene_id')
+# gt(deg) # pretty table
+
+# now plot
+vplot <- ggplot(deg) +
+	# aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
+	aes(y=adj.P.Val, x=logFC, text = paste("Symbol:", gene_id)) +
+	geom_point(size=2) +
+	#geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", size=1) +
+	#geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
+	#geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
+	#annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
+	#annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
+	labs(title="Volcano plot",
+		 subtitle = "Cutaneous leishmaniasis",
+		 caption=paste0("produced on ", Sys.time())) +
+	theme_bw()
+
+# Now make the volcano plot above interactive with plotly
+ggplotly(vplot)
 
