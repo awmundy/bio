@@ -14,6 +14,7 @@ suppressPackageStartupMessages({
 	library(gt)
 	library(plotly)
 	library(DT)
+	library(IsoformSwitchAnalyzeR)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -411,7 +412,8 @@ describe <- function(df_col) {
 
 write_log_cpm_filter_norm_impact_plots <- function(dge_list, 
 												   dge_list_filt, 
-												   dge_list_filt_norm) {
+												   dge_list_filt_norm,
+												   log_cpm_filter_norm_out_path) {
 	
 	log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 	log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
@@ -424,7 +426,7 @@ write_log_cpm_filter_norm_impact_plots <- function(dge_list,
 	all_plts <- plot_grid(plt_1, plt_2, plt_3, 
 						  labels = c('A', 'B', 'C'), 
 						  label_size = 12)
-	ggsave(file="/home/amundy/Desktop/filter_norm_impact.pdf", all_plts)
+	ggsave(file=log_cpm_filter_norm_out_path, all_plts)
 	
 }
 
@@ -518,7 +520,7 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-write_dge_volcano_plot <- function(bayes_fit, dge_volcano_outpath) {
+write_dge_volcano_plot <- function(bayes_fit, dge_volcano_out_path) {
 	
 	# adjust p values and get dataframe of genes sorted by abs log fold change
 	dge_top <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
@@ -542,11 +544,11 @@ write_dge_volcano_plot <- function(bayes_fit, dge_volcano_outpath) {
 	
 	# write interactive plot
 	interactive_vplot <- plotly::ggplotly(vplot)
-	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_outpath)
+	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
 }
 
-write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_outpath, 
-										dge_datatable_outpath) {
+write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_out_path, 
+										dge_datatable_out_path) {
 	# TODO the transformations to the counts here should be enforced to be 
 	# the same as for the volcano plot
 	
@@ -560,7 +562,7 @@ write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_outpath,
 	sig_dge <- elist$E[significance_mtx[,1] !=0,]
 	sig_dge <- as_tibble(sig_dge, rownames = "gene_id")
 	
-	write_csv(sig_dge, file=dge_csv_outpath)
+	write_csv(sig_dge, file=dge_csv_out_path)
 	
 	# build and write datatable for a pretty output
 	dtable <- datatable(sig_dge, 
@@ -571,7 +573,62 @@ write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_outpath,
 									   lengthMenu = c("10", "25", "50", "100")))
 	round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
 	dtable <- formatRound(dtable, columns=round_cols, digits=2)
-	htmlwidgets::saveWidget(dtable, dge_datatable_outpath)
+	htmlwidgets::saveWidget(dtable, dge_datatable_out_path)
+}
+
+temp_isoform_analysis <- function(study_design, explanatory_variable,
+								  abundance_paths, isoform_annotation_path,
+								  fasta_reference_path,
+								  isoform_analysis_out_dir) {
+	
+	# build design matrix specific to isoform anaysis library
+	isoform_design_matrix <- 
+		dplyr::select(study_design, sample_label, explanatory_variable)
+	isoform_design_matrix <- 
+		dplyr::rename(isoform_design_matrix, 
+					  sampleID=sample_label, 
+					  condition=explanatory_variable)
+	
+	# build object containing abundances needed for the next step
+	abundance_list <- importIsoformExpression(sampleVector = abundance_paths)
+	colnames(abundance_list$abundance) <- c("isoform_id", sample_labels) 
+	colnames(abundance_list$counts) <- c("isoform_id", sample_labels) 
+	
+	# TODO not working with the mouse reference data I've tried
+	switch_list <- importRdata(
+		isoformCountMatrix   = abundance_list$counts,
+		isoformRepExpression = abundance_list$abundance,
+		designMatrix         = isoform_design_matrix,
+		removeNonConvensionalChr = TRUE,
+		addAnnotatedORFs=TRUE,
+		ignoreAfterPeriod=TRUE,
+		isoformExonAnnoation = isoform_annotation_path,
+		isoformNtFasta       = fasta_reference_path,
+		showProgress = TRUE)
+	
+	# performs analysis of isoform switches and writes to output location
+	switch_list <- isoformSwitchAnalysisCombined(
+		switchAnalyzeRlist   = switch_list,
+		pathToOutput = isoform_analysis_out_dir)
+	
+	switch_summary <- extractSwitchSummary(switch_list)
+	print(switch_summary)
+	
+	# get the top switches by usage or q-values
+	top_switches <- extractTopSwitches(
+		switch_list, 
+		filterForConsequences = TRUE, 
+		n = 50, 
+		sortByQvals = FALSE) 
+	
+	
+	switchPlot(
+		switch_list,
+		gene='insert_gene_id_here',
+		condition1 = 'condition_1_here',
+		condition2 = 'condition_2_here',
+		localTheme = theme_bw())
+	
 }
 
 # abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
@@ -587,20 +644,14 @@ write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_outpath,
 # dge_list <- build_digital_gene_expression_list(gene_counts, study_design$sample_label)
 # log_cpm_long <- build_log_cpm_df_old(dge_list, long = TRUE)
 
+# input paths
 abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
 study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
-pca_scatter_out_path <- "/home/amundy/Desktop/pca_scatter.pdf"
-pca_small_multiples_out_path <- "/home/amundy/Desktop/pca_small_multiples.pdf"
-pca_scatter_ext_out_path <- "/home/amundy/Desktop/pca_scatter_ext.pdf"
-pca_small_multiples_ext_out_path <- "/home/amundy/Desktop/pca_small_multiples_ext.pdf"
-cluster_out_path <- "/home/amundy/Desktop/cluster.pdf"
-dge_volcano_outpath <- "/home/amundy/Desktop/dge_volcano.html"
-dge_csv_outpath <- "/home/amundy/Desktop/dge_table.csv"
-dge_datatable_outpath <- "/home/amundy/Desktop/dge_table.html"
-
-
+isoform_annotation_path <- '/media/amundy/Windows/bio/reference_genomes/mouse/gencode.vM31.chr_patch_hapl_scaff.annotation.gtf.gz'
+fasta_reference_path <- '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz'
 # external validation inputs
 mouse_archs4_rnaseq_path = '/media/amundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
+# TODO replace these with actual genes of interest
 ext_sample_metadata <- 
 	list(ext_sample_geos = 
 		 	c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945",
@@ -612,6 +663,19 @@ ext_sample_metadata <-
 		 ext_sample_treatment = 
 		 	c("unstim", "unstim", "unstim", "unstim", "unstim", "unstim",
 		 	  "LPS", "LPS", "LPS", "LPS", "LPS", "LPS"))
+
+# output_paths
+log_cpm_filter_norm_out_path <- "/home/amundy/Documents/dge/ac_thymus/filter_norm_impact.pdf"
+pca_scatter_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_scatter.pdf"
+pca_small_multiples_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_small_multiples.pdf"
+pca_scatter_ext_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_scatter_ext.pdf"
+pca_small_multiples_ext_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_small_multiples_ext.pdf"
+cluster_out_path <- "/home/amundy/Documents/dge/ac_thymus/cluster.pdf"
+dge_volcano_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_volcano.html"
+dge_csv_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_table.csv"
+dge_datatable_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_table.html"
+isoform_analysis_out_dir <- "/home/amundy/Documents/dge/ac_thymus/isoform_analysis/"
+
 
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
@@ -639,7 +703,8 @@ dge_list_filt <- filter_dge_list(dge_list,
 
 # adjusts norm factors in dge list samples df, allows comparison across samples
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
-write_log_cpm_filter_norm_impact_plots(dge_list, dge_list_filt, dge_list_filt_norm)
+write_log_cpm_filter_norm_impact_plots(dge_list, dge_list_filt, dge_list_filt_norm,
+									   log_cpm_filter_norm_out_path)
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 write_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels, cluster_out_path)
@@ -682,9 +747,8 @@ contrast_fit <- contrasts.fit(linear_fit, contrast_matrix)
 # has a log fold change greater than 0
 bayes_fit <- eBayes(contrast_fit)
 
-write_dge_volcano_plot(bayes_fit, dge_volcano_outpath)
-write_dge_csv_and_datatable(bayes_fit, elist, dge_csv_outpath, 
-							dge_datatable_outpath)
-
+write_dge_volcano_plot(bayes_fit, dge_volcano_out_path)
+write_dge_csv_and_datatable(bayes_fit, elist, dge_csv_out_path, 
+							dge_datatable_out_path)
 
 
