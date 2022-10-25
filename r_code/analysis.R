@@ -751,4 +751,12 @@ write_dge_volcano_plot(bayes_fit, dge_volcano_out_path)
 write_dge_csv_and_datatable(bayes_fit, elist, dge_csv_out_path, 
 							dge_datatable_out_path)
 
+# TODO not working yet
+# temp_isoform_analysis(study_design, explanatory_variable,
+# 					  abundance_paths, isoform_annotation_path,
+# 					  fasta_reference_path,
+# 					  isoform_analysis_out_dir)
+
+
+
 
