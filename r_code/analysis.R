@@ -520,10 +520,8 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-write_dge_volcano_plot <- function(bayes_fit, dge_volcano_out_path) {
+write_dge_volcano_plot <- function(dge_top, dge_volcano_out_path) {
 	
-	# adjust p values and get dataframe of genes sorted by abs log fold change
-	dge_top <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
 	dge_top <- as_tibble(dge_top, rownames='gene_id')
 	# gt(deg) # pretty table
 	
@@ -547,16 +545,9 @@ write_dge_volcano_plot <- function(bayes_fit, dge_volcano_out_path) {
 	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
 }
 
-write_dge_csv_and_datatable <- function(bayes_fit, elist, dge_csv_out_path, 
+write_dge_csv_and_datatable <- function(significance_mtx, elist, dge_csv_out_path, 
 										dge_datatable_out_path) {
-	# TODO the transformations to the counts here should be enforced to be 
-	# the same as for the volcano plot
-	
-	# using the fitted model object (that includes the contrast matrix), 
-	# get a table-like gene level object that records whether the gene was 
-	# significantly negative, sig positive, or not sig
-	significance_mtx <- decideTests(bayes_fit, method="global", adjust.method="BH",
-									p.value=0.05, lfc=2)
+
 	
 	# subset to just the genes that were significantly differently expressed
 	sig_dge <- elist$E[significance_mtx[,1] !=0,]
@@ -734,7 +725,7 @@ elist <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
 # are factors
 linear_fit <- lmFit(elist, design_matrix)
 
-# compare coefficients across the categories
+# makes matrix representing the contrasts that will to be evaluated
 # contrast_matrix <- makeContrasts(age_delta=age_old-age_young,
 								 # levels=design_matrix)
 contrast_matrix <- makeContrasts(cx3_effect=population_cx3_pos-population_cx3_neg,
@@ -747,8 +738,19 @@ contrast_fit <- contrasts.fit(linear_fit, contrast_matrix)
 # has a log fold change greater than 0
 bayes_fit <- eBayes(contrast_fit)
 
-write_dge_volcano_plot(bayes_fit, dge_volcano_out_path)
-write_dge_csv_and_datatable(bayes_fit, elist, dge_csv_out_path, 
+# adjust p values and get dataframe of genes sorted by abs log fold change
+dge_top <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
+write_dge_volcano_plot(dge_top, dge_volcano_out_path)
+
+
+# TODO the transformations to the counts here should be enforced to be 
+# the same as for the volcano plot
+# using the fitted model object (that includes the contrast matrix), 
+# get a table-like gene level object that records whether the gene was 
+# significantly negative, sig positive, or not sig
+significance_mtx <- decideTests(bayes_fit, method="global", adjust.method="BH",
+								p.value=0.05, lfc=2)
+write_dge_csv_and_datatable(significance_mtx, elist, dge_csv_out_path, 
 							dge_datatable_out_path)
 
 # TODO not working yet
