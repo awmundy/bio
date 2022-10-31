@@ -15,6 +15,9 @@ suppressPackageStartupMessages({
 	library(plotly)
 	library(DT)
 	library(IsoformSwitchAnalyzeR)
+	library(tidyverse)
+	library(gplots)
+	library(RColorBrewer)
 }) 
 
 get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
@@ -520,13 +523,13 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-write_dge_volcano_plot <- function(dge_top, dge_volcano_out_path) {
+write_dge_volcano_plot <- function(dge_top_volcano, dge_volcano_out_path) {
 	
-	dge_top <- as_tibble(dge_top, rownames='gene_id')
+	dge_top_volcano <- as_tibble(dge_top_volcano, rownames='gene_id')
 	# gt(deg) # pretty table
 	
 	# now plot
-	vplot <- ggplot(dge_top) +
+	vplot <- ggplot(dge_top_volcano) +
 		# aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
 		aes(y=adj.P.Val, x=logFC, text = paste("Symbol:", gene_id)) +
 		geom_point(size=2) +
@@ -545,18 +548,14 @@ write_dge_volcano_plot <- function(dge_top, dge_volcano_out_path) {
 	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
 }
 
-write_dge_csv_and_datatable <- function(significance_mtx, elist, dge_csv_out_path, 
+write_dge_csv_and_datatable <- function(dge, elist, dge_csv_out_path, 
 										dge_datatable_out_path) {
 
 	
-	# subset to just the genes that were significantly differently expressed
-	sig_dge <- elist$E[significance_mtx[,1] !=0,]
-	sig_dge <- as_tibble(sig_dge, rownames = "gene_id")
-	
-	write_csv(sig_dge, file=dge_csv_out_path)
+	write_csv(dge, file=dge_csv_out_path)
 	
 	# build and write datatable for a pretty output
-	dtable <- datatable(sig_dge, 
+	dtable <- datatable(dge, 
 						extensions = c('KeyTable', "FixedHeader"), 
 						caption = 'Differentially Expressed Genes',
 						rownames = FALSE,
@@ -739,8 +738,8 @@ contrast_fit <- contrasts.fit(linear_fit, contrast_matrix)
 bayes_fit <- eBayes(contrast_fit)
 
 # adjust p values and get dataframe of genes sorted by abs log fold change
-dge_top <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
-write_dge_volcano_plot(dge_top, dge_volcano_out_path)
+dge_top_volcano <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
+write_dge_volcano_plot(dge_top_volcano, dge_volcano_out_path)
 
 
 # TODO the transformations to the counts here should be enforced to be 
@@ -748,9 +747,13 @@ write_dge_volcano_plot(dge_top, dge_volcano_out_path)
 # using the fitted model object (that includes the contrast matrix), 
 # get a table-like gene level object that records whether the gene was 
 # significantly negative, sig positive, or not sig
-significance_mtx <- decideTests(bayes_fit, method="global", adjust.method="BH",
-								p.value=0.05, lfc=2)
-write_dge_csv_and_datatable(significance_mtx, elist, dge_csv_out_path, 
+all_dge <- decideTests(bayes_fit, method="global", adjust.method="BH",
+					   p.value=0.05, lfc=2)
+# subset to just the genes that were significantly differently expressed
+dge_mtx <- elist$E[all_dge[,1] !=0,]
+dge <- as_tibble(dge_mtx, rownames = "gene_id")
+
+write_dge_csv_and_datatable(dge, elist, dge_csv_out_path, 
 							dge_datatable_out_path)
 
 # TODO not working yet
@@ -759,6 +762,60 @@ write_dge_csv_and_datatable(significance_mtx, elist, dge_csv_out_path,
 # 					  fasta_reference_path,
 # 					  isoform_analysis_out_dir)
 
+#TODO remove, or at least be more deliberate about how many and 
+#which genes to evaluate
+dge_mtx = dge_mtx[1:10,]
+
+# Clustering
+# TODO consider using the clust command line tool instead
+#	- different clustering algorithms produce very different clusters
+#	- clust uses an ensembl method to get the consensus clustering across
+#	  multiple clustering algorithms
+# https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1536-8
+
+# get correlations at the gene and sample level
+gene_cor <- cor(t(dge_mtx), method='pearson')
+sample_cor <- cor(dge_mtx, method='spearman')
+
+# compute distance matrixes for each (1-cor is to make the vals be 0 to 2)
+# - euclidian distance is the default method
+gene_cor_dist <- as.dist(as.dist(1-gene_cor))
+sample_cor_dist <- as.dist(1-sample_cor)
+
+# compute heirarchical clusters
+gene_clust <- hclust(gene_cor_dist, method='complete')
+sample_clust <- hclust(sample_cor_dist, method='complete')
+
+# group the clusters, k is the number of sample categories
+gene_clust_groups <- cutree(gene_clust, k=2)
+
+# convert the cluster groups to colors
+cluster_colors <- rainbow(length(unique(gene_clust_groups)), start=0.1, end=0.9) 
+cluster_colors <- cluster_colors[as.vector(gene_clust_groups)] 
+
+heat_colors <- rev(brewer.pal(name="RdBu", n=11))
 
 
+# TODO can't easily save this
+# dge static heatmap , scale='row' computes z score that 
+# scales the expression of the rows (genes) to better highlight 
+# between gene differences
+heatmap.2(dge_mtx,
+		  Rowv = as.dendrogram(gene_clust),
+		  Colv = as.dendrogram(sample_clust),
+		  RowSideColors = cluster_colors,
+		  col = heat_colors, scale = 'row', labRow = NA,
+		  density.info = "none", trace = "none",
+		  cexRow = 1, cexCol = 1, margins = c(5, 5))
+dev.off()
 
+# same as above except no row-wise scaling, making the 
+# between sample differences more obvious
+heatmap.2(dge_mtx,
+		  Rowv = as.dendrogram(gene_clust),
+		  Colv = as.dendrogram(sample_clust),
+		  RowSideColors = cluster_colors,
+		  col = heat_colors, labRow = NA,
+		  density.info = "none", trace = "none",
+		  cexRow = 1, cexCol = 1, margins = c(5, 5))
+dev.off()
