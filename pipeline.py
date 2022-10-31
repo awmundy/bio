@@ -316,7 +316,7 @@ multiqc(cfg['rna_txs_dir'])
 
 # Thy_Y_CX3pos3_IGO_11991_B_5_S37_R1_001.fastq.gz
 #   - not in gzip format
-#   - kallisto quant failes to pseudoalign
+#   - kallisto quant fails to pseudoalign
 # Thy_Y_CX3pos3_IGO_11991_B_5_S37_R2_001.fastq.gz
 #   - 45% of way through fastqc: uk.ac.babraham.FastQC.Sequence.SequenceFormatException: Midline
 #     <seq string> didn't start with '+'
