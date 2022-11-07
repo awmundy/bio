@@ -194,23 +194,6 @@ get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_
   return(list(gene_counts, gene_lengths, gene_abunds))
 }
 
-assign_abundance_paths_to_study_design_old <-
-  function(study_design,
-           abundance_paths) {
-    abundance_df <- data.frame(abundance_paths)
-    abundance_df$sample_label <-
-      str_replace(abundance_df$abundance_paths, abundance_root_dir, '')
-    abundance_df$sample_label <-
-      str_replace(abundance_df$sample_label, '/abundance.tsv', '')
-    
-    study_design <-
-      merge(study_design, abundance_df, by.x = 'sra_accession', 
-            by.y='sample_label', all = TRUE)
-    assert_col_not_null(study_design$abundance_paths)
-    
-    return(study_design)
-  }
-
 assign_abundance_paths_to_study_design <- function(study_design,
                                                    abundance_paths) {
   abundance_df <- data.frame(abundance_paths)
@@ -234,13 +217,6 @@ assert_col_unique <- function(col) {
 assert_col_not_null <- function(col) {
   stopif(any(is.na(col)))
   }
-
-get_study_design_df_old <- function(study_design_path) {
-  study_design <- read_csv(study_design_path, col_types = cols(.default = 'c'))
-  study_design <- dplyr::rename(study_design, sample_label = sample)
-  
-  return(study_design)
-}
 
 get_study_design_df <- function(study_design_path) {
   study_design <- read_csv(study_design_path, col_types = cols(.default = 'c'))
