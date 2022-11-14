@@ -264,6 +264,7 @@ def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
         print('no combining of fastq files necessary')
         return
 
+    # combine fastq files where appropriate
     for new_sample_label, raw_and_combined_dirs in dirs_to_process.items():
         for read_type in ['R1', 'R2']:
             raw_sample_dir = raw_and_combined_dirs['raw_sample_dir']
@@ -288,18 +289,21 @@ def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
 # index + fastq file -> kallisto quant
 # fastqc output + kallisto quant output -> multiqc
 
+# directory to store inputs and outputs in, change as needed
+project_dir = '/media/amundy/Windows/bio/'
+
 cfgs = \
     {'diyt':
         {# http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
-         'ref_genome': '/media/amundy/Windows/bio/reference_genomes/human/Homo_sapiens.GRCh38.cdna.all.fa.gz',
+         'ref_genome': f'{project_dir}reference_genomes/human/Homo_sapiens.GRCh38.cdna.all.fa.gz',
          # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-         'rna_txs_dir': '/media/amundy/Windows/bio/diyt/rna_txs/',
+         'rna_txs_dir': f'{project_dir}diyt/rna_txs/',
          'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}},
     'ac_thymus':
         {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
-         'ref_genome': '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
-         'raw_rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/raw_rna_txs/' ,
-         'rna_txs_dir': '/media/amundy/Windows/bio/ac_thymus/rna_txs/',
+         'ref_genome': f'{project_dir}reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
+         'raw_rna_txs_dir': f'{project_dir}ac_thymus/raw_rna_txs/',
+         'rna_txs_dir': f'{project_dir}ac_thymus/rna_txs/',
           # todo figure out these (and other) params for the thymus data
          'seq_params': {'read_end_type': '--double'}}
         }
