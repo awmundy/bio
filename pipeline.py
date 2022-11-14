@@ -290,7 +290,7 @@ def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
 # fastqc output + kallisto quant output -> multiqc
 
 # directory to store inputs and outputs in, change as needed
-project_dir = '/media/amundy/Windows/bio/'
+project_dir = '/media/awmundy/Windows/bio/'
 
 cfgs = \
     {'diyt':
