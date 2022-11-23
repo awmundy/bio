@@ -15,26 +15,9 @@ suppressPackageStartupMessages({
 	library(plotly)
 	library(DT)
 	library(IsoformSwitchAnalyzeR)
-	library(tidyverse)
 	library(gplots)
 	library(RColorBrewer)
 }) 
-
-get_abundance_paths_old <- function(sra_accessions, abundance_root_dir) {
-  # extract sra_accession values (which are the abundance subdir names)
-  seq_folders <- unlist(study_design$sra_accession)
-  
-  # construct abundance paths
-  abundance_paths <- c()
-  for(i in 1:length(seq_folders))
-    abundance_paths[i] <- paste(abundance_root_dir, 
-                                seq_folders[i], 
-                                '/abundance.tsv', 
-                                sep='')
-  
-  stopifnot(all(file.exists(abundance_paths))) 
-  return(abundance_paths)
-}
 
 get_abundance_paths <- function(abundance_root_dir) {
   abundance_dirs <- list.dirs(abundance_root_dir)[-1]
@@ -84,21 +67,6 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
   return(dge_list)
 }
 
-build_log_cpm_df_old <- function(dge_list, long) {
-  # Construct a logged counts per million df
-  
-  log_cpm <- cpm(dge_list, log=TRUE)
-  log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
-  # convert gene_id to int for later libraries that require it
-  log_cpm <- as_tibble(transform(log_cpm, gene_id=as.numeric(gene_id)))
-  if (long == TRUE) {
-    log_cpm <- pivot_longer(log_cpm,
-                            cols = HS01:CL13,
-                            names_to = "samples",
-                            values_to = "expression")
-  }
-  return(log_cpm)
-}
 
 build_log_cpm_df <- function(dge_list, long) {
   # Construct a logged counts per million df
@@ -114,24 +82,6 @@ build_log_cpm_df <- function(dge_list, long) {
                             values_to = "expression")
   }
   return(log_cpm)
-}
-
-build_log_cpm_plot_old <- function(cpm_df, subtitle) {
-  plt <- ggplot(cpm_df) +
-    aes(x=samples, y=expression, fill=samples) +
-    geom_violin(trim = FALSE, show.legend = FALSE) +
-    stat_summary(fun = "median", 
-                 geom = "point", 
-                 shape = 95, 
-                 size = 10, 
-                 color = "black", 
-                 show.legend = FALSE) +
-    labs(y="log2 expression", x = "sample",
-         title="Log2 Counts per Million (CPM)",
-         subtitle=subtitle,
-         caption=paste0("produced on ", Sys.time())) +
-    theme_bw()
-  return(plt)
 }
 
 build_log_cpm_plot <- function(cpm_df, subtitle) {
@@ -596,19 +546,6 @@ temp_isoform_analysis <- function(study_design, explanatory_variable,
 		localTheme = theme_bw())
 	
 }
-
-# abundance_root_dir <- '/media/amundy/Windows/bio/diyt/rna_txs/fastq_folders/'
-# study_design_path <- '/media/amundy/Windows/bio/diyt/studydesign.csv'
-# study_design <- get_study_design_df_old(study_design_path)
-# sample_labels <- study_design$sample_label
-# sra_accessions <- study_design$sra_accession
-# sample_groups <- study_design$group
-# abundance_paths <- get_abundance_paths_old(study_design, abundance_root_dir)
-# study_design <- assign_abundance_paths_to_study_design_old(study_design, abundance_paths)
-# tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Hsapiens.v86)
-# c(gene_counts, gene_lengths, gene_abunds) %<-% get_gene_level_stats_dfs(study_design, tx_to_gene_df)
-# dge_list <- build_digital_gene_expression_list(gene_counts, study_design$sample_label)
-# log_cpm_long <- build_log_cpm_df_old(dge_list, long = TRUE)
 
 # input paths
 abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
