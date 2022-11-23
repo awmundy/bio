@@ -1,14 +1,39 @@
 suppressPackageStartupMessages({
 	library(tidyverse)
-	library(GSEABase) #functions and methods for Gene Set Enrichment Analysis
-	library(Biobase) #base functions for bioconductor; required by GSEABase
-	library(GSVA) #Gene Set Variation Analysis, a non-parametric and unsupervised method for estimating variation of gene set enrichment across samples.
-	library(gprofiler2) #tools for accessing the GO enrichment results using g:Profiler web resources
-	library(clusterProfiler) # GSEA tool/plot builder
-	library(msigdbr) # download msigdb gene lists
-	library(enrichplot) # enrichment plots
-	# library(openxlsx)
+  library(dplyr)
+  #functions and methods for Gene Set Enrichment Analysis (i.e. functional enrichment analysis)
+  library(GSEABase)
+  # required by GSEABase
+	library(Biobase) 
+  # Gene Set Variation Analysis using an unsupervised method
+	library(GSVA) 
+  # tools for functional enrichment using g:Profiler
+	library(gprofiler2) 
+  # GSEA tool/plot builder
+	library(clusterProfiler)
+  # download msigdb gene lists
+	library(msigdbr) 
+  # enrichment plots
+	library(enrichplot) 
+  library(EnsDb.Hsapiens.v86)
+  library(htmlwidgets)
 }) 
+
+write_gost_plot <- function(deg_df, out_path) {
+  # builds and writes an interactive plot showing functional 
+  # enrichment by various categories
+  # deg_df: dataframe of differentially expressed genes
+  unique_genes <- unique(deg_df$Row.names)
+  
+  # TODO determine what correction method is typically used and use that
+  # default args return significantly enriched gene sets at a 0.05 threshold
+  gost_res <- gost(unique_genes,
+                   organism = "hsapiens",
+                   correction_method = "fdr")
+  
+  out_plot <- gostplot(gost_res, interactive = T, capped = T) 
+  htmlwidgets::saveWidget(out_plot, out_path)
+}
 
 # Gene Ontology Analysis (GO Analysis)
 # - For a given list of genes (i.e. highly differentially expressed ones), 
@@ -46,27 +71,27 @@ suppressPackageStartupMessages({
 
 ### Inputs ###
 previous_gsea_results_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/GSEA_Results_Arianna.xlsx'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/GSEA_Results_Arianna.xlsx'
 deg_df_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/Gy10_vs_Gy0_DBTRG_log2FC_1_padj_0.05.csv'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/Gy10_vs_Gy0_DBTRG_log2FC_1_padj_0.05.csv'
 non_msig_gene_lists_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/senescence_genelists.csv'
+  '/media/awmundy/Windows/bio/glioblastoma_p_selectin/senescence_genelists.csv'
 
 gost_plot_up_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/outputs/gene_ontology_plot_up.html'
-gost_plot_up_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/outputs/gene_ontology_plot_down.html'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gene_ontology_plot_up.html'
+gost_plot_down_path <- 
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gene_ontology_plot_down.html'
 gsea_table_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_table.xlsx'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_table.xlsx'
 gsea_plot_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_plot.pdf'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_plot.pdf'
 gsea_bubble_plot_path <- 
-	'/media/amundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_bubble_plot.pdf'
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_bubble_plot.pdf'
 
 
 # build dataframe with gene sets of interest
 msig_hallmarks <- c('HALLMARK_INFLAMMATORY_RESPONSE',
-					'HALLMARK_P53_PATHWAY')
+                    'HALLMARK_P53_PATHWAY')
 # msig_hallmarks <- c(
 # 	'HALLMARK_TNFA_SIGNALING_VIA_NFKB',
 # 	'HALLMARK_ALLOGRAFT_REJECTION',
@@ -96,37 +121,49 @@ msig_hallmarks <- c('HALLMARK_INFLAMMATORY_RESPONSE',
 # 	'HALLMARK_ANDROGEN_RESPONSE',
 # 	'HALLMARK_MTORC1_SIGNALING'
 # )
+
+# load the gene ontology sets, and filter to the ones that are a part of 
+# the hallmarks we care about
 msig_gene_sets <- msigdbr(species='Homo sapiens', category='H')
 msig_gene_sets <- dplyr::filter(msig_gene_sets, gs_name %in% msig_hallmarks)
 msig_gene_sets <- dplyr::select(msig_gene_sets, gs_name, gene_symbol)
 
-other_gene_sets <- read_csv(non_msig_gene_lists_path, col_types=cols(.default = 'c'))
+#TODO explain provenance of these gene sets and why we care about them
+# load senescence related gene sets
+other_gene_sets <- read_csv(non_msig_gene_lists_path, 
+                            col_types=cols(.default = 'c'))
 other_gene_sets <- dplyr::select(other_gene_sets, Senescence_UP, SASP)
 other_gene_sets <- pivot_longer(other_gene_sets,
-								cols = c(Senescence_UP, SASP),
-								names_to = "gs_name",
-								values_to = "gene_symbol")
+                                cols = c(Senescence_UP, SASP),
+                                names_to = "gs_name",
+                                values_to = "gene_symbol")
 other_gene_sets <- drop_na(other_gene_sets)
 other_gene_sets <- other_gene_sets[order(other_gene_sets$gs_name),]
+
+# append gene sets together
 gene_sets <- rbind(msig_gene_sets, other_gene_sets)
 
-# read differentially expressed genes df and subset to genes of interest
+# read significantly differentially expressed genes df and subset 
+# to genes of interest
 deg_df <- read_csv(deg_df_path, col_types=cols("Row.names"="c"))
 # subset to genes in gene sets
 deg_df <- as_tibble(merge(deg_df, gene_sets, by.x = 'Row.names',
 					   by.y='gene_symbol'))
-# TODO figure out why this was wrong
-# test2 <- dplyr::filter(deg_df, Row.names %in% gene_sets$gene_symbol)
+# add label for whether the gene is in ensembl
+all_genes <- as_tibble(genes(EnsDb.Hsapiens.v86))
+deg_df$in_ensembl <- as.numeric(deg_df$Row.names %in% all_genes$gene_name)
+genes_not_in_ensembl <- 
+  list(unique(dplyr::filter(deg_df, deg_df$in_ensembl == 0)$Row.names))
+if (length(genes_not_in_ensembl) > 0) {
+  print(paste('Genes from given gene sets that are not in esembldb:', 
+              genes_not_in_ensembl))}
+
+# split out into upregulated and downregulated sets
 deg_df_up <- dplyr::filter(deg_df, log2FoldChange >= 0)
 deg_df_down <- dplyr::filter(deg_df, log2FoldChange < 0)
 
-# Gene Ontology analysis
-gost_res_up <- gost(deg_df_up$Row.names, organism = "hsapiens", correction_method = "fdr")
-gost_res_down <- gost(deg_df_down$Row.names, organism = "hsapiens", correction_method = "fdr")
-# TODO figure out how to save these to html programatically
-# need to export these to html using r studio viewer
-gostplot(gost_res_up, interactive = T, capped = T) 
-gostplot(gost_res_down, interactive = T, capped = T) 
+write_gost_plot(deg_df_up, gost_plot_up_path)
+write_gost_plot(deg_df_down, gost_plot_down_path)
 
 # build a named vector to pass to the GSEA function
 gsea_input <- deg_df$log2FoldChange
