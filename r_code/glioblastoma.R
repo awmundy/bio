@@ -145,6 +145,31 @@ get_gsea_res <- function(gsea_input, gene_sets) {
   return(gsea_res)  
 }
 
+write_gsea_bubble_plot <- function(gsea_df, gsea_bubble_plot_path) {
+  # bubble plot
+  # - bubble size: number of genes in the gene set
+  # - color: enrichment score
+  # - transparency: -log10 adjusted p value
+  bubble_plot_df <- mutate(gsea_df,
+                           phenotype = case_when(NES > 0 ~ "intervention",
+                                                 NES < 0 ~ "control"))
+  pdf(gsea_bubble_plot_path)
+  ggplot(bubble_plot_df, aes(x=phenotype, y=ID)) +
+    geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
+    scale_color_gradient(low="blue", high="red") +
+    theme_bw()
+  dev.off()
+  
+}
+
+write_gsea_line_plot <- function(gsea_res, gsea_df, gsea_line_plot_path) {
+  pdf(gsea_line_plot_path)
+  gseaplot2(gsea_res, geneSetID = gsea_df$ID,
+            title = gsea_df$Description)
+  dev.off()
+}
+
+
 # Gene Ontology Analysis (GO Analysis)
 # - For a given list of genes (i.e. highly differentially expressed ones), 
 #	determine whether certain categorizations (ontologies) of those genes are
@@ -195,15 +220,13 @@ gost_plot_down_path <-
 	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gene_ontology_plot_down.html'
 gsea_table_path <- 
 	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_table.xlsx'
-gsea_plot_path <- 
-	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_plot.pdf'
+gsea_line_plot_path <- 
+	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_line_plot.pdf'
 gsea_bubble_plot_path <- 
 	'/media/awmundy/Windows/bio/glioblastoma_p_selectin/outputs/gsea_bubble_plot.pdf'
 
 
 msig_hallmarks <- get_msig_hallmark_labels_of_interest()
-
-
 
 msig_gene_sets <- get_msig_gene_sets(msig_hallmarks)
 other_gene_sets <- get_other_gene_sets(non_msig_gene_lists_path)
@@ -222,28 +245,10 @@ deg_df_down <- dplyr::filter(deg_df, log2FoldChange < 0)
 write_gost_plot(deg_df_up, gost_plot_up_path)
 write_gost_plot(deg_df_down, gost_plot_down_path)
 
-# get gsea analysis output
+# get and write gsea analysis output
 gsea_input <- get_gsea_input(deg_df)
 gsea_res <- get_gsea_res(gsea_input, gene_sets)
 gsea_df <- as_tibble(gsea_res@result)
 write.xlsx(gsea_df, gsea_table_path)
-
-# TODO one plot for each hallmark
-pdf(gsea_plot_path)
-gseaplot2(gsea_res, geneSetID = gsea_df$ID,
-		  title = gsea_df$Description)
-dev.off()
-
-# bubble plot
-# - bubble size: number of genes in the gene set
-# - color: enrichment score
-# - transparency: -log10 adjusted p value
-bubble_plot_df <- mutate(gsea_df,
-				  phenotype = case_when(NES > 0 ~ "intervention",
-				  					  NES < 0 ~ "control"))
-pdf(gsea_bubble_plot_path)
-ggplot(bubble_plot_df, aes(x=phenotype, y=ID)) +
-	geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
-	scale_color_gradient(low="blue", high="red") +
-	theme_bw()
-dev.off()
+write_gsea_line_plot(gsea_res, gsea_df, gsea_line_plot_path)
+write_gsea_bubble_plot(gsea_df, gsea_bubble_plot_path)
