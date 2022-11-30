@@ -19,7 +19,7 @@ https://posit.co/download/rstudio-desktop/
 BiocManager::install(version = "3.16")`
 - may need to change file permissions in package directory on linux
 - requires `make`, and `gcc`, `liblapack-dev`, `libopenblas-dev`, `libcurl4-openssl-dev`, `libxml2-dev`, 
-  `libfontconfig1-dev`, to be installed (some just on linux)
+  `libfontconfig1-dev`, `r-cran-rjava`, to be installed (some just on linux)
 - `cluserProfiler` issue with `patchworkGrob`
   - `patchwork`, a dependency for `clusterprofiler`, is also an unrelated package in another repository
   - need to uninstall the other `patchwork`, `setRepositories()` to just CRAN and Bioc software, and then install
