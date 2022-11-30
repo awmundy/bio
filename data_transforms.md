@@ -198,8 +198,20 @@ Purpose:
   - Assumes normal distribution
   
 
-### Gene Set Enrichment analysis
+### Functional Enrichment analysis
+- Used to determine if certain sets of genes corresponding to some function are differentially 
+  expressed (enriched)
 - Documentation:
   - https://sci-hub.se/https://www.nature.com/articles/s41596-018-0103-9
+- Externally cosntructed gene sets can be used, these can be curated by experts
+- g:Profiler is a functional enrichment analysis tool 
+  - It takes just a list of genes and determines whether those genes represent relevant clusters of genes,
+    as opposed to just being a random set of genes
+  - In this analysis an R library is used to interface with g:Profiler
+- GSEABase is an R libray that helps perform functional enrichment analysis as well
+  - Requires a sorted list of genes (by e.g. log fold change)
+  - Gene expression is compared across two classes (e.g. experimental and control) and the genes are 
+    ranked by this comparison's metric (e.g. logfold change)
+  - Outcome measure is whether each gene set is significantly differentially expressed
 
 
