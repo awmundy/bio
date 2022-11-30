@@ -1,4 +1,4 @@
-###Kallisto Quant
+### Kallisto Quant
 - Description:
   - Calculates transcript abundance, which is the estimated frequency of transcripts in the sample
 - Purpose:
@@ -15,7 +15,7 @@
   - https://sci-hub.se/10.1038/nbt.3519
 
 
-###tximport
+### tximport
 - Description:
   - Reads in upstream data and converts to counts if that data is abundances
   - Aggregates abundance transcript level data to gene level
@@ -37,7 +37,7 @@
     - Can optionally derive counts from the abundances (this is what is done for this analysis)
 
 
-###DGEList
+### DGEList
 - Description:
   - Creates a list for downstream processing that contains
     - The counts from tximport
@@ -50,7 +50,7 @@
   - Scaled TPM
 
 
-###Filter DGEList
+### Filter DGEList
 - Description:
   - DGEList gene counts that don't pass a volume threshold within sample and between
     samples are filtered out
@@ -66,7 +66,7 @@
     number of genes with a reasonable false discovery rate downstream
 
 
-###Normalize DGEList
+### Normalize DGEList
 - Description:
   - Uses Trimmed Mean of M values (TMM) to build sample level normalization factors and
     store them in the sample level df
@@ -84,7 +84,7 @@
   - Normalization Factors and Library Sizes
 
 
-###CPM/Log 2 transform
+### CPM/Log 2 transform
 - Description: Converts counts to Normalzed Counts Per Million (CPM) and Log2 transforms it
   - CPM calc: Counts from DGEList$counts / library size from DGEList Samples * 1,000,000
   - Applies normalization factors too
@@ -96,7 +96,7 @@
   - Log2CPM TODO fill in
 
 
-###voom
+### voom
 Description:
   - Using a supplied design matrix and DGEList object, variance stabilizes the CPM.
   - Currently requires counts not CPM and performs the log2CPM itself, duplicatively
@@ -108,7 +108,7 @@ Purpose:
   - Log2CPM, variance stabilized
 
 
-###lmFit
+### lmFit
 - Description:
   - Produces coefficients at the gene level using the model specified in the design matrix
     - i.e. if the design matrix has a positive and negative group, there will be a
@@ -125,7 +125,7 @@ Purpose:
   - Coefficient/average expression value for each sample category
 
 
-###contrast fit
+### contrast fit
 - Description:
   - Constructs gene level coefficient differences between the categories passed in
   - e.g. age_old - age_young = the difference between the coefficients from linear fit
@@ -141,7 +141,7 @@ Purpose:
   - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7873980/
 
 
-###eBayes
+### eBayes
 Description:
   - Does an empirical Bayes calculation
   - Produces t statistics for if each of the gene level contrasts produced in the
@@ -161,7 +161,7 @@ Purpose:
 - Documentation:
   - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7873980/
 
-###topTable
+### topTable
 - Description:
   - Adjusts P values for false discovery and returns a sorted gene level dataframe for genes
     that meet a maximum P value and minimum log2 fold change
@@ -176,11 +176,11 @@ Purpose:
 - Unit:
   - logfc, average expression, t statistic, adjusted and unadjusted P values
 
-###decideTests
+### decideTests
 - Description:
   - Similar to topTable, but used to produce datatables (pretty tables) for some reason
 
-###Clustering
+### Clustering
 - Distances between genes are calculated
 - Spearman Correlation
   - Evaluates the correlation between the ranks of the variables
