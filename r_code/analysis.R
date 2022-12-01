@@ -358,11 +358,12 @@ write_log_cpm_filter_norm_impact_plots <- function(dge_list,
 						  labels = c('A', 'B', 'C'), 
 						  label_size = 12)
 	ggsave(file=log_cpm_filter_norm_out_path, all_plts)
-	
+
+		
 }
 
 get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
-													  ext_sample_metadata) {
+                                                      ext_sample_metadata) {
 	## retrieves sample data from an external source for comparison purposes
 	## returns 
 	ext_sample_geos <-
@@ -409,24 +410,24 @@ get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
 	ext_dge_list <- calcNormFactors(ext_dge_list, method = "TMM")
 	ext_cpm <- build_log_cpm_df(ext_dge_list, long = FALSE)
 	
-	ext_data <- list(ext_cpm = ext_cpm,
+	external_data <- list(ext_cpm = ext_cpm,
 					 ext_study_design = ext_study_design)
 	
-	return(ext_data)
+	return(external_data)
 }
 
 
-write_external_sample_pca <- function(ext_data, pca_scatter_ext_out_path,
+write_external_sample_pca <- function(external_data, pca_scatter_ext_out_path,
 									  pca_small_multiples_ext_out_path) {
 	
-	ext_pca_metrics <- get_pca_metrics(ext_data$ext_cpm)
+	ext_pca_metrics <- get_pca_metrics(external_data$ext_cpm)
 	write_pca_scatter_plots(ext_pca_metrics, 
 							c('population', 'treatment'), 
-							ext_data$ext_study_design, 
+							external_data$ext_study_design, 
 							pca_scatter_ext_out_path)
 	write_pca_small_multiples_plots(ext_pca_metrics, 
 									c('population', 'treatment'), 
-									ext_data$ext_study_design, 
+									external_data$ext_study_design, 
 									pca_small_multiples_ext_out_path)
 }
 
@@ -451,13 +452,20 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-write_dge_volcano_plot <- function(dge_top_volcano, dge_volcano_out_path) {
-	
-	dge_top_volcano <- as_tibble(dge_top_volcano, rownames='gene_id')
+write_dge_volcano_plot <- function(bayes_stats, 
+                                   multiple_testing_correction_method,
+                                   dge_volcano_out_path) {
+  # adjust p values and get dataframe of genes sorted by abs log fold change,
+  # then build plot
+  dge_top_volcano_input <- topTable(bayes_stats, 
+                                    adjust=multiple_testing_correction_method,
+                                    coef=1, number=40000, sort.by="logFC")
+  
+  dge_top_volcano_input <- as_tibble(dge_top_volcano_input, rownames='gene_id')
 	# gt(deg) # pretty table
 	
 	# now plot
-	vplot <- ggplot(dge_top_volcano) +
+	vplot <- ggplot(dge_top_volcano_input) +
 		# aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
 		aes(y=adj.P.Val, x=logFC, text = paste("Symbol:", gene_id)) +
 		geom_point(size=2) +
@@ -476,14 +484,15 @@ write_dge_volcano_plot <- function(dge_top_volcano, dge_volcano_out_path) {
 	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
 }
 
-write_dge_csv_and_datatable <- function(dge, elist, dge_csv_out_path, 
-										dge_datatable_out_path) {
+write_dge_csv_and_datatable <- function(sig_dge_tbl,
+                                        dge_csv_out_path, 
+                                        dge_datatable_out_path) {
 
 	
-	write_csv(dge, file=dge_csv_out_path)
+	write_csv(sig_dge_tbl, file=dge_csv_out_path)
 	
 	# build and write datatable for a pretty output
-	dtable <- datatable(dge, 
+	dtable <- datatable(sig_dge_tbl, 
 						extensions = c('KeyTable', "FixedHeader"), 
 						caption = 'Differentially Expressed Genes',
 						rownames = FALSE,
@@ -549,6 +558,84 @@ temp_isoform_analysis <- function(study_design, explanatory_variable,
 	
 }
 
+get_mean_variance_gene_weights <- function(dge_list_filt_norm, design_matrix){
+  # voom requires the input to be counts, not CPM, TPM etc
+  # performs log2cpm of the counts then variance stabilizes them, 
+  # then estimates the mean-variance relationship and produces observation 
+  # level weights for linear modelling
+  # object is an Expression List (EList)
+  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
+  
+  return(mean_variance_weights)
+}
+
+get_empirical_bayes_differential_expression_stats <- 
+  function(mean_variance_weights, explanatory_variable,
+           experimental_label, control_label) {
+    
+    # builds a linear model with coefficients for each column in design matrix
+    # each row is a gene, each value is the average of the transformed 
+    # counts from voom for that category/gene combo, if explanatory variables 
+    # are factors
+    linear_stats <- lmFit(mean_variance_weights, design_matrix)
+    
+    # makes matrix representing the contrasts that will to be evaluated
+    experimental_column <- paste(explanatory_variable, '_', experimental_label, sep='')
+    control_column <- paste(explanatory_variable, '_', control_label, sep='')
+    contrast_string <- paste(experimental_column, '-', control_column, sep='')
+    contrast_matrix <- makeContrasts(contrasts=contrast_string,
+                                     levels=design_matrix)
+    
+    # coefficients here are the differences between the coefficients of each 
+    # category in the contrast
+    contrast_stats <- contrasts.fit(linear_stats, contrast_matrix)
+    
+    # uses empirical bayes method to produce p values and other statistics 
+    # showing whether each gene has a log fold change greater than fc
+    bayes_stats <- eBayes(contrast_stats)
+    
+    return(bayes_stats)
+  }
+
+get_sig_dif_expressed_genes <- function(bayes_stats, 
+                                        multiple_testing_correction_method) {
+  # using bayes_stats- the fitted model object (that includes the 
+  # contrast matrix)- get a gene-level table showing whether the gene was 
+  # significantly negative, sig positive, or not sig
+  all_dge <- decideTests(bayes_stats, method="global", 
+                         adjust.method=multiple_testing_correction_method,
+                         p.value=0.05, lfc=2)
+  # subset to just the genes that were significantly differently expressed
+  sig_dge_mtx <- mean_variance_weights$E[all_dge[,1] !=0,]
+  
+  return(sig_dge_mtx)
+}
+
+get_clusters <- function(cluster_type, sig_dge_mtx) {
+  
+  # TODO consider using the clust command line tool instead
+  #	- different clustering algorithms produce very different clusters
+  #	- clust uses an ensembl method to get the consensus clustering across
+  #	  multiple clustering algorithms
+  # https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1536-8
+  
+  stopifnot(cluster_type %in% c('gene', 'sample'))
+  
+  if (cluster_type == 'gene') {
+    # use pearson bc gene expression is continuous
+    cor_mtx <- cor(t(sig_dge_mtx), method='pearson')
+    #TODO comment on why as.dist needs to be done twice
+    # (1-cor is to make the vals be 0 to 2)
+    cor_dist <- as.dist(as.dist(1-cor_mtx))
+  } else if (cluster_type == 'sample') {
+    # spearman bc samples discrete and should be ranked
+    cor_mtx <- cor(sig_dge_mtx, method='spearman')
+    cor_dist <- (as.dist(1-cor_mtx))
+  }
+  
+  clust <-hclust(cor_dist, method='complete')
+}
+
 # input paths
 abundance_root_dir <- 
   '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
@@ -585,8 +672,8 @@ dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcan
 dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
 dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
 isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
-
-
+gene_cluster_heatmap_gene_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
+gene_cluster_heatmap_sample_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
@@ -603,9 +690,6 @@ tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
 c(gene_counts, gene_lengths, gene_abunds) %<-% 
 	get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
-
-#TODO build some sort of relevant plot for these abundances
-# gene_abunds <- add_row_descriptive_stats(gene_abunds, sample_labels)
 
 dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
 
@@ -627,75 +711,31 @@ write_pca_small_multiples_plots(pca_metrics, sample_dimensions, study_design,
 								pca_small_multiples_out_path)
 
 ## comparing to external sample
-ext_data <- get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
-										  ext_sample_metadata)
-write_external_sample_pca(ext_data, pca_scatter_ext_out_path,
-						  pca_small_multiples_ext_out_path)
+external_data <- 
+  get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
+                                            ext_sample_metadata)
+write_external_sample_pca(external_data, pca_scatter_ext_out_path,
+                          pca_small_multiples_ext_out_path)
 
 
-get_empirical_bayes_differential_expression_stats <- 
-  function(study_design, explanatory_variable, dge_list_filt_norm, 
-           experimental_label, control_label) {
-
-  design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable) 
-  
-  # voom requires the input to be counts, not CPM, TPM etc
-  # performs log2cpm of the counts then variance stabilizes them, 
-  # then estimates the mean-variance relationship and produces observation 
-  # level weights for linear modelling
-  # object is an Expression List (EList)
-  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
-  
-  # builds a linear model with coefficients for each column in design matrix
-  # each row is a gene, each value is the average of the transformed 
-  # counts from voom for that category/gene combo, if explanatory variables 
-  # are factors
-  linear_stats <- lmFit(elist, design_matrix)
-  
-  # makes matrix representing the contrasts that will to be evaluated
-  experimental_column <- paste(explanatory_variable, '_', experimental_label, sep='')
-  control_column <- paste(explanatory_variable, '_', control_label, sep='')
-  contrast_string <- paste(experimental_column, '-', control_column, sep='')
-  contrast_matrix <- makeContrasts(contrast=contrast_string,
-                                   levels=design_matrix)
-  
-  # coefficients here are the differences between the coefficients of each 
-  # category in the contrast
-  contrast_stats <- contrasts.fit(linear_stats, contrast_matrix)
-  
-  # uses empirical bayes method to produce p values and other statistics 
-  # showing whether each gene has a log fold change greater than fc
-  bayes_stats <- eBayes(contrast_stats)
-  
-  return(bayes_stats)
-}
-
+design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable) 
+mean_variance_weights <- get_mean_variance_gene_weights(dge_list_filt_norm, 
+                                                        design_matrix)
 bayes_stats <- 
-  get_empirical_bayes_differential_expression_stats(study_design, 
+  get_empirical_bayes_differential_expression_stats(mean_variance_weights, 
                                                     explanatory_variable, 
-                                                    dge_list_filt_norm, 
                                                     experimental_label, 
                                                     control_label)
 
-# adjust p values and get dataframe of genes sorted by abs log fold change
-dge_top_volcano <- topTable(bayes_stats, adjust ="BH", coef=1, 
-                            number=40000, sort.by="logFC")
-write_dge_volcano_plot(dge_top_volcano, dge_volcano_out_path)
 
+multiple_testing_correction_method <- "BH"
+write_dge_volcano_plot(bayes_stats, multiple_testing_correction_method, 
+                       dge_volcano_out_path)
 
-# TODO the transformations to the counts here should be enforced to be 
-# the same as for the volcano plot
-# using the fitted model object (that includes the contrast matrix), 
-# get a table-like gene level object that records whether the gene was 
-# significantly negative, sig positive, or not sig
-all_dge <- decideTests(bayes_fit, method="global", adjust.method="BH",
-					   p.value=0.05, lfc=2)
-# subset to just the genes that were significantly differently expressed
-dge_mtx <- elist$E[all_dge[,1] !=0,]
-dge <- as_tibble(dge_mtx, rownames = "gene_id")
-
-write_dge_csv_and_datatable(dge, elist, dge_csv_out_path, 
-							dge_datatable_out_path)
+sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats, 
+                                           multiple_testing_correction_method)
+sig_dge_tbl <- as_tibble(sig_dge_mtx, rownames = "gene_id")
+write_dge_csv_and_datatable(sig_dge_tbl, dge_csv_out_path, dge_datatable_out_path)
 
 # TODO not working yet
 # temp_isoform_analysis(study_design, explanatory_variable,
@@ -705,27 +745,10 @@ write_dge_csv_and_datatable(dge, elist, dge_csv_out_path,
 
 #TODO remove, or at least be more deliberate about how many and 
 #which genes to evaluate
-dge_mtx = dge_mtx[1:10,]
+sig_dge_mtx = sig_dge_mtx[1:10,]
 
-# Clustering
-# TODO consider using the clust command line tool instead
-#	- different clustering algorithms produce very different clusters
-#	- clust uses an ensembl method to get the consensus clustering across
-#	  multiple clustering algorithms
-# https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1536-8
-
-# get correlations at the gene and sample level
-gene_cor <- cor(t(dge_mtx), method='pearson')
-sample_cor <- cor(dge_mtx, method='spearman')
-
-# compute distance matrixes for each (1-cor is to make the vals be 0 to 2)
-# - euclidian distance is the default method
-gene_cor_dist <- as.dist(as.dist(1-gene_cor))
-sample_cor_dist <- as.dist(1-sample_cor)
-
-# compute heirarchical clusters
-gene_clust <- hclust(gene_cor_dist, method='complete')
-sample_clust <- hclust(sample_cor_dist, method='complete')
+gene_clust <- get_clusters('gene', sig_dge_mtx)
+sample_clust <- get_clusters('sample', sig_dge_mtx)
 
 # group the clusters, k is the number of sample categories
 gene_clust_groups <- cutree(gene_clust, k=2)
@@ -733,26 +756,26 @@ gene_clust_groups <- cutree(gene_clust, k=2)
 # convert the cluster groups to colors
 cluster_colors <- rainbow(length(unique(gene_clust_groups)), start=0.1, end=0.9) 
 cluster_colors <- cluster_colors[as.vector(gene_clust_groups)] 
-
 heat_colors <- rev(brewer.pal(name="RdBu", n=11))
 
 
-# TODO can't easily save this
 # dge static heatmap , scale='row' computes z score that 
 # scales the expression of the rows (genes) to better highlight 
 # between gene differences
-heatmap.2(dge_mtx,
-		  Rowv = as.dendrogram(gene_clust),
-		  Colv = as.dendrogram(sample_clust),
-		  RowSideColors = cluster_colors,
-		  col = heat_colors, scale = 'row', labRow = NA,
-		  density.info = "none", trace = "none",
-		  cexRow = 1, cexCol = 1, margins = c(5, 5))
+png(gene_cluster_heatmap_gene_scaling)
+heatmap.2(sig_dge_mtx,
+		      Rowv = as.dendrogram(gene_clust),
+		      Colv = as.dendrogram(sample_clust),
+		      RowSideColors = cluster_colors,
+		      col = heat_colors, scale = 'row', labRow = NA,
+		      density.info = "none", trace = "none",
+		      cexRow = 1, cexCol = 1, margins = c(5, 5))
 dev.off()
 
 # same as above except no row-wise scaling, making the 
 # between sample differences more obvious
-heatmap.2(dge_mtx,
+png(gene_cluster_heatmap_sample_scaling)
+heatmap.2(sig_dge_mtx,
 		  Rowv = as.dendrogram(gene_clust),
 		  Colv = as.dendrogram(sample_clust),
 		  RowSideColors = cluster_colors,
