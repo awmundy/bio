@@ -74,7 +74,7 @@ get_msig_hallmark_labels_of_interest <- function() {
 get_msig_gene_sets <- function(msig_hallmarks) {
   # load the gene ontology sets, and filter to the ones that are a part of 
   # the hallmarks we care about
-  msig_gene_sets <- msigdbr(species='Homo sapiens', category='H')
+  msig_gene_sets <- msigdbr(species='Homo sapiens', category='H') # H for hallmarks
   msig_gene_sets <- dplyr::filter(msig_gene_sets, gs_name %in% msig_hallmarks)
   msig_gene_sets <- dplyr::select(msig_gene_sets, gs_name, gene_symbol)
   
@@ -252,3 +252,4 @@ gsea_df <- as_tibble(gsea_res@result)
 write.xlsx(gsea_df, gsea_table_path)
 write_gsea_line_plot(gsea_res, gsea_df, gsea_line_plot_path)
 write_gsea_bubble_plot(gsea_df, gsea_bubble_plot_path)
+
