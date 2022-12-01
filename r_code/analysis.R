@@ -548,12 +548,17 @@ temp_isoform_analysis <- function(study_design, explanatory_variable,
 }
 
 # input paths
-abundance_root_dir <- '/media/amundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
-study_design_path <- '/media/amundy/Windows/bio/ac_thymus/study_design_removed_bad_one.csv'
-isoform_annotation_path <- '/media/amundy/Windows/bio/reference_genomes/mouse/gencode.vM31.chr_patch_hapl_scaff.annotation.gtf.gz'
-fasta_reference_path <- '/media/amundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz'
+abundance_root_dir <- 
+  '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
+study_design_path <- 
+  '/media/awmundy/Windows/bio/ac_thymus/study_design/study_design_removed_bad_one.csv'
+isoform_annotation_path <- 
+  '/media/awmundy/Windows/bio/reference_genomes/mouse/gencode.vM31.chr_patch_hapl_scaff.annotation.gtf.gz'
+fasta_reference_path <- 
+  '/media/awmundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz'
 # external validation inputs
-mouse_archs4_rnaseq_path = '/media/amundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
+mouse_archs4_rnaseq_path <- 
+  '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
 # TODO replace these with actual genes of interest
 ext_sample_metadata <- 
 	list(ext_sample_geos = 
@@ -568,16 +573,16 @@ ext_sample_metadata <-
 		 	  "LPS", "LPS", "LPS", "LPS", "LPS", "LPS"))
 
 # output_paths
-log_cpm_filter_norm_out_path <- "/home/amundy/Documents/dge/ac_thymus/filter_norm_impact.pdf"
-pca_scatter_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_scatter.pdf"
-pca_small_multiples_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_small_multiples.pdf"
-pca_scatter_ext_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_scatter_ext.pdf"
-pca_small_multiples_ext_out_path <- "/home/amundy/Documents/dge/ac_thymus/pca_small_multiples_ext.pdf"
-cluster_out_path <- "/home/amundy/Documents/dge/ac_thymus/cluster.pdf"
-dge_volcano_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_volcano.html"
-dge_csv_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_table.csv"
-dge_datatable_out_path <- "/home/amundy/Documents/dge/ac_thymus/dge_table.html"
-isoform_analysis_out_dir <- "/home/amundy/Documents/dge/ac_thymus/isoform_analysis/"
+log_cpm_filter_norm_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
+pca_scatter_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
+pca_small_multiples_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
+pca_scatter_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter_ext.pdf"
+pca_small_multiples_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
+cluster_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/cluster.pdf"
+dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
+dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
+dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
+isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
 
 
 study_design <- get_study_design_df(study_design_path)
