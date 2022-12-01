@@ -595,6 +595,8 @@ population <- study_design$population
 abundance_paths <- study_design$abundance_path
 sample_dimensions <- c('population', 'age')
 explanatory_variable <- c('population')
+control_label <- 'cx3_neg'
+experimental_label <- 'cx3_pos'
 
 
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -630,36 +632,54 @@ ext_data <- get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
 write_external_sample_pca(ext_data, pca_scatter_ext_out_path,
 						  pca_small_multiples_ext_out_path)
 
-design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 
-# voom requires the input to be counts, not CPM, TPM etc
-# performs lot2cpm of the counts then variance stabilizes them, 
-# then estimates the mean-variance relationship and produces observation 
-# level weights for linear modelling
-# object is an Expression List (EList)
-elist <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
+get_empirical_bayes_differential_expression_stats <- 
+  function(study_design, explanatory_variable, dge_list_filt_norm, 
+           experimental_label, control_label) {
 
-# builds a linear model with coefficients for each column in design matrix
-# each row is a gene, each value is the average of the transformed 
-# counts from voom for that category/gene combo, if explanatory variables 
-# are factors
-linear_fit <- lmFit(elist, design_matrix)
+  design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable) 
+  
+  # voom requires the input to be counts, not CPM, TPM etc
+  # performs log2cpm of the counts then variance stabilizes them, 
+  # then estimates the mean-variance relationship and produces observation 
+  # level weights for linear modelling
+  # object is an Expression List (EList)
+  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
+  
+  # builds a linear model with coefficients for each column in design matrix
+  # each row is a gene, each value is the average of the transformed 
+  # counts from voom for that category/gene combo, if explanatory variables 
+  # are factors
+  linear_stats <- lmFit(elist, design_matrix)
+  
+  # makes matrix representing the contrasts that will to be evaluated
+  experimental_column <- paste(explanatory_variable, '_', experimental_label, sep='')
+  control_column <- paste(explanatory_variable, '_', control_label, sep='')
+  contrast_string <- paste(experimental_column, '-', control_column, sep='')
+  contrast_matrix <- makeContrasts(contrast=contrast_string,
+                                   levels=design_matrix)
+  
+  # coefficients here are the differences between the coefficients of each 
+  # category in the contrast
+  contrast_stats <- contrasts.fit(linear_stats, contrast_matrix)
+  
+  # uses empirical bayes method to produce p values and other statistics 
+  # showing whether each gene has a log fold change greater than fc
+  bayes_stats <- eBayes(contrast_stats)
+  
+  return(bayes_stats)
+}
 
-# makes matrix representing the contrasts that will to be evaluated
-# contrast_matrix <- makeContrasts(age_delta=age_old-age_young,
-								 # levels=design_matrix)
-contrast_matrix <- makeContrasts(cx3_effect=population_cx3_pos-population_cx3_neg,
-								 levels=design_matrix)
-
-# coefficients here are the differences between the coefficients of the categories
-contrast_fit <- contrasts.fit(linear_fit, contrast_matrix)
-
-# uses empirical bayes method to produce p values showing whether each gene
-# has a log fold change greater than 0
-bayes_fit <- eBayes(contrast_fit)
+bayes_stats <- 
+  get_empirical_bayes_differential_expression_stats(study_design, 
+                                                    explanatory_variable, 
+                                                    dge_list_filt_norm, 
+                                                    experimental_label, 
+                                                    control_label)
 
 # adjust p values and get dataframe of genes sorted by abs log fold change
-dge_top_volcano <- topTable(bayes_fit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
+dge_top_volcano <- topTable(bayes_stats, adjust ="BH", coef=1, 
+                            number=40000, sort.by="logFC")
 write_dge_volcano_plot(dge_top_volcano, dge_volcano_out_path)
 
 
