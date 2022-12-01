@@ -63,7 +63,9 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
   #         normalization factor of 1
   
   # subset to sample labels cols only, and convert to matrix
-  dge_list <- DGEList(as.matrix(gene_counts[, sample_labels]))  
+  dge_list <- DGEList(as.matrix(gene_counts[, sample_labels]))
+  row.names(dge_list$counts) <- gene_counts$gene
+  
   return(dge_list)
 }
 
@@ -631,8 +633,9 @@ write_external_sample_pca(ext_data, pca_scatter_ext_out_path,
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 
 # voom requires the input to be counts, not CPM, TPM etc
-# lot2cpm of the counts then variance stabilize them
-# $E contains the resulting counts
+# performs lot2cpm of the counts then variance stabilizes them, 
+# then estimates the mean-variance relationship and produces observation 
+# level weights for linear modelling
 # object is an Expression List (EList)
 elist <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
 
