@@ -1,3 +1,21 @@
+#' ---
+#' title: <center> Test Title <center>
+#' author: "<center> Test Author<center><br>"
+#' date: "<center> _`r Sys.Date()`_ <center>"
+#' output:
+#'   html_document:
+#'     code_folding: show
+#'     df_print: paged
+#'     theme: yeti
+#'     highlight: tango
+#'     toc: yes
+#'     number_sections: true
+#' ---
+#' ```{r setup, include=FALSE}
+#' knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+#' ```
+
+#' # Libraries
 suppressPackageStartupMessages({
 	library(tidyverse)
 	library(tximport)
@@ -19,6 +37,7 @@ suppressPackageStartupMessages({
 	library(RColorBrewer)
 }) 
 
+#' # Functions
 get_abundance_paths <- function(abundance_root_dir) {
   abundance_dirs <- list.dirs(abundance_root_dir)[-1]
   
@@ -192,7 +211,8 @@ convert_tibble_to_mtx <- function(tbl, row_names_col) {
 	return(mtx)
 }
 
-write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
+plot_sample_cluster_dendogram <- function(tbl, sample_labels, cluster_out_path,
+                                          write_output) {
 	## writes a dendogram cluster  plot for a gene level dataset where 
 	##	the headers are sample_labels
 	
@@ -206,13 +226,18 @@ write_cluster_dendogram_plot <- function(tbl, sample_labels, cluster_out_path) {
 	clusters <- hclust(distance, method = "average")
 	
 	# build dendogram and write
-	pdf(cluster_out_path)
-	plot(clusters, labels=sample_labels)
-	dev.off()
+	if (write_output) {
+	  pdf(cluster_out_path)
+	  plot(clusters, labels=sample_labels)
+	  dev.off()
+	} else {
+	  plot(clusters, labels=sample_labels)
+	}	
+
 }
 
-write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
-									study_design, pca_out_path) {
+plot_pca_scatter <- function(pca_metrics, sample_dimensions,
+									study_design, pca_out_path, write_output) {
 	sample_labels <- study_design$sample_label
 
 		plot_list = list()
@@ -246,12 +271,13 @@ write_pca_scatter_plots <- function(pca_metrics, sample_dimensions,
 			plot_list[[paste(i, sample_dimension, sep='')]] <- recordPlot()
 		}}
 	
-	# write out
-	pdf(pca_out_path, onefile=TRUE, width=4, height=4)
-	for (plt in plot_list) {
-		replayPlot(plt)
+	if (write_output==TRUE) {
+	  pdf(pca_out_path, onefile=TRUE, width=4, height=4)
+	  for (plt in plot_list) {
+	    replayPlot(plt)
+	  }
+	  graphics.off()
 	}
-	graphics.off()
 }
 
 get_pca_metrics <- function(cpm_matrix) {
@@ -278,10 +304,11 @@ get_pca_metrics <- function(cpm_matrix) {
 	return(pca_metrics)
 }
 
-write_pca_small_multiples_plots <- function(pca_metrics,
-											sample_dimensions,
-											study_design,
-											pca_small_multiples_out_path) {
+plot_pca_small_multiples <- function(pca_metrics,
+                                     sample_dimensions,
+                                     study_design,
+                                     pca_small_multiples_out_path,
+                                     write_output) {
 	
 	sample_labels <- study_design$sample_label
 	scores <- pca_metrics$scores[, 1:6]
@@ -316,11 +343,13 @@ write_pca_small_multiples_plots <- function(pca_metrics,
 		plot_list[[sample_dimension]] <- recordPlot()
 	}
 	
-	pdf(pca_small_multiples_out_path, onefile = TRUE)
-	for (plt in plot_list) {
-		replayPlot(plt)
+	if (write_output==TRUE) {
+	  pdf(pca_small_multiples_out_path, onefile = TRUE)
+	  for (plt in plot_list) {
+	    replayPlot(plt)
+	  }
+	  graphics.off()
 	}
-	graphics.off()
 }
 
 describe <- function(df_col) {
@@ -341,25 +370,28 @@ describe <- function(df_col) {
 	return(out)
 }
 
-write_log_cpm_filter_norm_impact_plots <- function(dge_list, 
-												   dge_list_filt, 
-												   dge_list_filt_norm,
-												   log_cpm_filter_norm_out_path) {
+plot_log_cpm_filter_norm_impact <- function(dge_list,
+                                            dge_list_filt,
+                                            dge_list_filt_norm,
+                                            log_cpm_filter_norm_out_path,
+                                            write_output) {
 	
 	log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 	log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
 	log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
 	
 	plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
-	plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
+	# plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
 	plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
 	
-	all_plts <- plot_grid(plt_1, plt_2, plt_3, 
-						  labels = c('A', 'B', 'C'), 
+	all_plts <- plot_grid(plt_1, plt_3, 
+						  labels = c('A', 'B'), 
 						  label_size = 12)
-	ggsave(file=log_cpm_filter_norm_out_path, all_plts)
-
-		
+	if (write_output == TRUE){
+	  ggsave(file=log_cpm_filter_norm_out_path, all_plts)  
+	} else {
+	  print(all_plts)
+	}
 }
 
 get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
@@ -417,18 +449,21 @@ get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
 }
 
 
-write_external_sample_pca <- function(external_data, pca_scatter_ext_out_path,
-									  pca_small_multiples_ext_out_path) {
+plot_external_sample_pca <- function(external_data, pca_scatter_ext_out_path,
+                                     pca_small_multiples_ext_out_path,
+                                     write_output) {
 	
 	ext_pca_metrics <- get_pca_metrics(external_data$ext_cpm)
-	write_pca_scatter_plots(ext_pca_metrics, 
-							c('population', 'treatment'), 
-							external_data$ext_study_design, 
-							pca_scatter_ext_out_path)
-	write_pca_small_multiples_plots(ext_pca_metrics, 
-									c('population', 'treatment'), 
-									external_data$ext_study_design, 
-									pca_small_multiples_ext_out_path)
+	plot_pca_scatter(ext_pca_metrics,
+	                 c('population', 'treatment'),
+	                 external_data$ext_study_design,
+	                 pca_scatter_ext_out_path,
+	                 write_output)
+	plotpca_small_multiples(ext_pca_metrics,
+	                        c('population', 'treatment'),
+	                        external_data$ext_study_design,
+	                        pca_small_multiples_ext_out_path,
+	                        write_output)
 }
 
 get_design_matrix <- function(study_design, has_intercept, 
@@ -636,7 +671,7 @@ get_clusters <- function(cluster_type, sig_dge_mtx) {
   clust <-hclust(cor_dist, method='complete')
 }
 
-# input paths
+#' # Input paths
 abundance_root_dir <- 
   '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
 study_design_path <- 
@@ -648,20 +683,8 @@ fasta_reference_path <-
 # external validation inputs
 mouse_archs4_rnaseq_path <- 
   '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
-# TODO replace these with actual genes of interest
-ext_sample_metadata <- 
-	list(ext_sample_geos = 
-		 	c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945",
-		 	  "GSM2310946", "GSM2310947", "GSM2310948", "GSM2310949", "GSM2310950",
-		 	  "GSM2310951", "GSM2310952"),
-		 ext_sample_population = 
-		 	c("WT", "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8", "WT", 
-		 	  "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8"),
-		 ext_sample_treatment = 
-		 	c("unstim", "unstim", "unstim", "unstim", "unstim", "unstim",
-		 	  "LPS", "LPS", "LPS", "LPS", "LPS", "LPS"))
 
-# output_paths
+#' # Output_paths
 log_cpm_filter_norm_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
 pca_scatter_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
 pca_small_multiples_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
@@ -674,21 +697,39 @@ dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_tabl
 isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
 gene_cluster_heatmap_gene_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
 gene_cluster_heatmap_sample_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
-study_design <- get_study_design_df(study_design_path)
-abundance_paths <- get_abundance_paths(abundance_root_dir)
-study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
-sample_labels <- study_design$sample_label
-population <- study_design$population
-abundance_paths <- study_design$abundance_path
+
+#' # Configuration
+#' 
 sample_dimensions <- c('population', 'age')
 explanatory_variable <- c('population')
 control_label <- 'cx3_neg'
 experimental_label <- 'cx3_pos'
+# Must be FALSE if knitting to Rmarkdown
+write_output <- FALSE
+
+# TODO replace these with actual genes of interest
+ext_sample_metadata <- 
+  list(ext_sample_geos = 
+         c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945",
+           "GSM2310946", "GSM2310947", "GSM2310948", "GSM2310949", "GSM2310950",
+           "GSM2310951", "GSM2310952"),
+       ext_sample_population = 
+         c("WT", "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8", "WT", 
+           "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8"),
+       ext_sample_treatment = 
+         c("unstim", "unstim", "unstim", "unstim", "unstim", "unstim",
+           "LPS", "LPS", "LPS", "LPS", "LPS", "LPS"))
+study_design <- get_study_design_df(study_design_path)
+abundance_paths <- get_abundance_paths(abundance_root_dir)
+study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
+sample_labels <- study_design$sample_label
+abundance_paths <- study_design$abundance_path
 
 
+#' # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
-c(gene_counts, gene_lengths, gene_abunds) %<-% 
+c(gene_counts, gene_lengths, gene_abunds) %<-%
 	get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
 
 dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
@@ -699,87 +740,95 @@ dge_list_filt <- filter_dge_list(dge_list,
 
 # adjusts norm factors in dge list samples df, allows comparison across samples
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
-write_log_cpm_filter_norm_impact_plots(dge_list, dge_list_filt, dge_list_filt_norm,
-									   log_cpm_filter_norm_out_path)
 
+#' # Normalization and Filtering Impact on CPM Distributions
+plot_log_cpm_filter_norm_impact(dge_list, dge_list_filt, dge_list_filt_norm,
+                                log_cpm_filter_norm_out_path, write_output)
+
+#' # Sample Cluster Dendogram
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
-write_cluster_dendogram_plot(log_cpm_filt_norm, sample_labels, cluster_out_path)
+plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
+                              cluster_out_path, write_output)
 
+#' # Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
-write_pca_scatter_plots(pca_metrics, sample_dimensions, study_design, pca_scatter_out_path)
-write_pca_small_multiples_plots(pca_metrics, sample_dimensions, study_design,
-								pca_small_multiples_out_path)
+plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
+                 pca_scatter_out_path, write_output)
+plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
+                         pca_small_multiples_out_path, write_output)
 
-## comparing to external sample
-external_data <- 
+
+#' # Compare to external sample
+external_data <-
   get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
                                             ext_sample_metadata)
-write_external_sample_pca(external_data, pca_scatter_ext_out_path,
-                          pca_small_multiples_ext_out_path)
+plot_external_sample_pca(external_data, pca_scatter_ext_out_path,
+                         pca_small_multiples_ext_out_path,
+                         write_output)
 
 
-design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable) 
-mean_variance_weights <- get_mean_variance_gene_weights(dge_list_filt_norm, 
+design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
+mean_variance_weights <- get_mean_variance_gene_weights(dge_list_filt_norm,
                                                         design_matrix)
-bayes_stats <- 
-  get_empirical_bayes_differential_expression_stats(mean_variance_weights, 
-                                                    explanatory_variable, 
-                                                    experimental_label, 
+bayes_stats <-
+  get_empirical_bayes_differential_expression_stats(mean_variance_weights,
+                                                    explanatory_variable,
+                                                    experimental_label,
                                                     control_label)
 
-
 multiple_testing_correction_method <- "BH"
-write_dge_volcano_plot(bayes_stats, multiple_testing_correction_method, 
+write_dge_volcano_plot(bayes_stats, multiple_testing_correction_method,
                        dge_volcano_out_path)
 
-sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats, 
+sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats,
                                            multiple_testing_correction_method)
 sig_dge_tbl <- as_tibble(sig_dge_mtx, rownames = "gene_id")
 write_dge_csv_and_datatable(sig_dge_tbl, dge_csv_out_path, dge_datatable_out_path)
 
-# TODO not working yet
-# temp_isoform_analysis(study_design, explanatory_variable,
-# 					  abundance_paths, isoform_annotation_path,
-# 					  fasta_reference_path,
-# 					  isoform_analysis_out_dir)
-
-#TODO remove, or at least be more deliberate about how many and 
-#which genes to evaluate
-sig_dge_mtx = sig_dge_mtx[1:10,]
-
-gene_clust <- get_clusters('gene', sig_dge_mtx)
-sample_clust <- get_clusters('sample', sig_dge_mtx)
-
-# group the clusters, k is the number of sample categories
-gene_clust_groups <- cutree(gene_clust, k=2)
-
-# convert the cluster groups to colors
-cluster_colors <- rainbow(length(unique(gene_clust_groups)), start=0.1, end=0.9) 
-cluster_colors <- cluster_colors[as.vector(gene_clust_groups)] 
-heat_colors <- rev(brewer.pal(name="RdBu", n=11))
-
-
-# dge static heatmap , scale='row' computes z score that 
-# scales the expression of the rows (genes) to better highlight 
-# between gene differences
-png(gene_cluster_heatmap_gene_scaling)
-heatmap.2(sig_dge_mtx,
-		      Rowv = as.dendrogram(gene_clust),
-		      Colv = as.dendrogram(sample_clust),
-		      RowSideColors = cluster_colors,
-		      col = heat_colors, scale = 'row', labRow = NA,
-		      density.info = "none", trace = "none",
-		      cexRow = 1, cexCol = 1, margins = c(5, 5))
-dev.off()
-
-# same as above except no row-wise scaling, making the 
-# between sample differences more obvious
-png(gene_cluster_heatmap_sample_scaling)
-heatmap.2(sig_dge_mtx,
-		  Rowv = as.dendrogram(gene_clust),
-		  Colv = as.dendrogram(sample_clust),
-		  RowSideColors = cluster_colors,
-		  col = heat_colors, labRow = NA,
-		  density.info = "none", trace = "none",
-		  cexRow = 1, cexCol = 1, margins = c(5, 5))
-dev.off()
+# # TODO not working yet
+# # temp_isoform_analysis(study_design, explanatory_variable,
+# # 					  abundance_paths, isoform_annotation_path,
+# # 					  fasta_reference_path,
+# # 					  isoform_analysis_out_dir)
+# 
+# #TODO remove, or at least be more deliberate about how many and
+# #which genes to evaluate
+# sig_dge_mtx = sig_dge_mtx[1:10,]
+# 
+# # TODO determine when it makes to cluster (here or earlier)
+# gene_clust <- get_clusters('gene', sig_dge_mtx)
+# sample_clust <- get_clusters('sample', sig_dge_mtx)
+# 
+# # group the clusters, k is the number of sample categories
+# gene_clust_groups <- cutree(gene_clust, k=2)
+# 
+# # convert the cluster groups to colors
+# cluster_colors <- rainbow(length(unique(gene_clust_groups)), start=0.1, end=0.9)
+# cluster_colors <- cluster_colors[as.vector(gene_clust_groups)]
+# heat_colors <- rev(brewer.pal(name="RdBu", n=11))
+# 
+# 
+# # dge static heatmap , scale='row' computes z score that
+# # scales the expression of the rows (genes) to better highlight
+# # between gene differences
+# png(gene_cluster_heatmap_gene_scaling)
+# heatmap.2(sig_dge_mtx,
+# 		      Rowv = as.dendrogram(gene_clust),
+# 		      Colv = as.dendrogram(sample_clust),
+# 		      RowSideColors = cluster_colors,
+# 		      col = heat_colors, scale = 'row', labRow = NA,
+# 		      density.info = "none", trace = "none",
+# 		      cexRow = 1, cexCol = 1, margins = c(5, 5))
+# dev.off()
+# 
+# # same as above except no row-wise scaling, making the
+# # between sample differences more obvious
+# png(gene_cluster_heatmap_sample_scaling)
+# heatmap.2(sig_dge_mtx,
+# 		  Rowv = as.dendrogram(gene_clust),
+# 		  Colv = as.dendrogram(sample_clust),
+# 		  RowSideColors = cluster_colors,
+# 		  col = heat_colors, labRow = NA,
+# 		  density.info = "none", trace = "none",
+# 		  cexRow = 1, cexCol = 1, margins = c(5, 5))
+# dev.off()
