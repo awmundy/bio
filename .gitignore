@@ -1,2 +1,6 @@
 /r/
 .Rproj.user
+/r_code/*_cache/
+/r_code/*_files/
+*.tex
+/r_code/*.html
