@@ -1,10 +1,9 @@
 #' ---
-#' title: <center> Test Title <center>
-#' author: "<center> Test Author<center><br>"
+#' title: Thymus Analysis 
 #' date: "<center> _`r Sys.Date()`_ <center>"
 #' output:
 #'   html_document:
-#'     code_folding: show
+#'     code_folding: hide
 #'     df_print: paged
 #'     theme: yeti
 #'     highlight: tango
@@ -35,6 +34,8 @@ suppressPackageStartupMessages({
 	library(IsoformSwitchAnalyzeR)
 	library(gplots)
 	library(RColorBrewer)
+  library(rmarkdown)
+  library(ggplot2)
 }) 
 
 #' # Functions
@@ -261,7 +262,7 @@ plot_pca_scatter <- function(pca_metrics, sample_dimensions,
 				ylab(paste0(second_pc_label, "(", pca_metrics$var_explained[i + 1]*100,"%",")")) +
 				labs(title="PCA plot",
 					 caption=paste0("produced on ", Sys.time())) +
-				coord_fixed() +
+			coord_fixed() +
 				# overwrites legend title to be the actual dimension label
 				guides(color=guide_legend(sample_dimension)) +
 			theme_bw()
@@ -387,7 +388,7 @@ plot_log_cpm_filter_norm_impact <- function(dge_list,
 	all_plts <- plot_grid(plt_1, plt_3, 
 						  labels = c('A', 'B'), 
 						  label_size = 12)
-	if (write_output == TRUE){
+	if (write_output){
 	  ggsave(file=log_cpm_filter_norm_out_path, all_plts)  
 	} else {
 	  print(all_plts)
@@ -459,7 +460,7 @@ plot_external_sample_pca <- function(external_data, pca_scatter_ext_out_path,
 	                 external_data$ext_study_design,
 	                 pca_scatter_ext_out_path,
 	                 write_output)
-	plotpca_small_multiples(ext_pca_metrics,
+	plot_pca_small_multiples(ext_pca_metrics,
 	                        c('population', 'treatment'),
 	                        external_data$ext_study_design,
 	                        pca_small_multiples_ext_out_path,
@@ -479,7 +480,7 @@ get_design_matrix <- function(study_design, has_intercept,
 	# design_matrix <- model.matrix(~age_factor*population_factor)
 	# additive
 	# design_matrix <- model.matrix(~age_factor + population_factor)
-	
+
 	# better column names
 	prefix <- paste(explanatory_variable, '_', sep='')
 	colnames(design_matrix) <- sub("variable_factor", prefix, colnames(design_matrix))
@@ -487,9 +488,10 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-write_dge_volcano_plot <- function(bayes_stats, 
-                                   multiple_testing_correction_method,
-                                   dge_volcano_out_path) {
+plot_dge_volcano <- function(bayes_stats,
+                             multiple_testing_correction_method,
+                             dge_volcano_out_path,
+                             write_output) {
   # adjust p values and get dataframe of genes sorted by abs log fold change,
   # then build plot
   dge_top_volcano_input <- topTable(bayes_stats, 
@@ -516,14 +518,18 @@ write_dge_volcano_plot <- function(bayes_stats,
 	
 	# write interactive plot
 	interactive_vplot <- plotly::ggplotly(vplot)
-	htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
+	if (write_output) {
+	  htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
+	  } else {
+	    interactive_vplot
+	  }
 }
 
-write_dge_csv_and_datatable <- function(sig_dge_tbl,
-                                        dge_csv_out_path, 
-                                        dge_datatable_out_path) {
-
-	
+plot_dge_datatable_and_write_csv <- function(sig_dge_tbl,
+                                             dge_csv_out_path,
+                                             dge_datatable_out_path, 
+                                             write_output) {
+  
 	write_csv(sig_dge_tbl, file=dge_csv_out_path)
 	
 	# build and write datatable for a pretty output
@@ -531,11 +537,17 @@ write_dge_csv_and_datatable <- function(sig_dge_tbl,
 						extensions = c('KeyTable', "FixedHeader"), 
 						caption = 'Differentially Expressed Genes',
 						rownames = FALSE,
-						options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, 
-									   lengthMenu = c("10", "25", "50", "100")))
+						options = list(keys = TRUE, searchHighlight = TRUE,
+						               pageLength = 10,
+						               lengthMenu = c("10", "25", "50", "100")))
 	round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
 	dtable <- formatRound(dtable, columns=round_cols, digits=2)
-	htmlwidgets::saveWidget(dtable, dge_datatable_out_path)
+	
+	if (write_output) {
+	  htmlwidgets::saveWidget(dtable, dge_datatable_out_path)
+	} else {
+	  dtable
+	}
 }
 
 temp_isoform_analysis <- function(study_design, explanatory_variable,
@@ -593,14 +605,48 @@ temp_isoform_analysis <- function(study_design, explanatory_variable,
 	
 }
 
-get_mean_variance_gene_weights <- function(dge_list_filt_norm, design_matrix){
+plot_and_return_mean_variance_gene_weights <- 
+  function(dge_list_filt_norm,
+           design_matrix,
+           mean_variance_plot_out_path,
+           write_output){
   # voom requires the input to be counts, not CPM, TPM etc
   # performs log2cpm of the counts then variance stabilizes them, 
   # then estimates the mean-variance relationship and produces observation 
   # level weights for linear modelling
   # object is an Expression List (EList)
-  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, plot = TRUE)
+
+  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, 
+                                # plot=TRUE,
+                                save.plot=TRUE,
+                                )
   
+  # points
+  df = data.frame(x = mean_variance_weights$voom.xy$x,
+                  y = mean_variance_weights$voom.xy$y)
+  
+  # trend line
+  df.line = data.frame(x = mean_variance_weights$voom.line$x,
+                       y = mean_variance_weights$voom.line$y)
+  
+  plt <- 
+    ggplot(df, aes(x,y)) + 
+    geom_point(size=.1) + 
+    theme_bw(15) + 
+    geom_line(data=df.line, aes(x,y), color="red") +
+    ylim(0, max(df$y))
+  interactive_plot <- plotly::ggplotly(plt)
+  # add titles/labels here due to bug in ggplotly
+  interactive_plot <- plotly::layout(interactive_plot, 
+                                     title='Gene Mean Variance',
+                                     xaxis=list(title='log2 count + 0.5'),
+                                     yaxis=list(title="Sqrt(standard deviation)"))
+  if (write_output) {
+    htmlwidgets::saveWidget(interactive_plot, mean_variance_plot_out_path)
+  } else {
+    interactive_plot
+  }
+
   return(mean_variance_weights)
 }
 
@@ -615,7 +661,8 @@ get_empirical_bayes_differential_expression_stats <-
     linear_stats <- lmFit(mean_variance_weights, design_matrix)
     
     # makes matrix representing the contrasts that will to be evaluated
-    experimental_column <- paste(explanatory_variable, '_', experimental_label, sep='')
+    experimental_column <- paste(explanatory_variable, '_', experimental_label, 
+                                 sep='')
     control_column <- paste(explanatory_variable, '_', control_label, sep='')
     contrast_string <- paste(experimental_column, '-', control_column, sep='')
     contrast_matrix <- makeContrasts(contrasts=contrast_string,
@@ -671,6 +718,62 @@ get_clusters <- function(cluster_type, sig_dge_mtx) {
   clust <-hclust(cor_dist, method='complete')
 }
 
+plot_gene_cluster_heatmaps <- 
+  function(sig_dge_mtx,
+           gene_cluster_heatmap_gene_scaling_out_path,
+           gene_cluster_heatmap_sample_scaling_out_path,
+           write_output) {
+    
+    # TODO be more deliberate about how many and
+    # which genes to evaluate
+    sig_dge_mtx = sig_dge_mtx[1:10,]
+    
+    gene_clust <- get_clusters('gene', sig_dge_mtx)
+    sample_clust <- get_clusters('sample', sig_dge_mtx)
+    
+    # group the clusters, k is the number of sample categories
+    gene_clust_groups <- cutree(gene_clust, k=2)
+    
+    # convert the cluster groups to colors
+    gene_clust_colors <- rainbow(length(unique(gene_clust_groups)), 
+                                 start=0.1, end=0.9)
+    gene_clust_colors <- gene_clust_colors[as.vector(gene_clust_groups)]
+    
+    heat_colors <- rev(brewer.pal(name="RdBu", n=11))
+    
+    # dge static heatmap , scale='row' computes z score that
+    # scales the expression of the rows (genes) to better highlight
+    # between gene differences
+    
+    gene_scaling_heatmap <-
+      heatmap.2(sig_dge_mtx,
+                Rowv = as.dendrogram(gene_clust),
+                Colv = as.dendrogram(sample_clust),
+                RowSideColors = gene_clust_colors,
+                col = heat_colors, scale = 'row', labRow = NA,
+                density.info = 'none', trace = 'none',
+                cexRow = 1, cexCol = 1, margins = c(5, 5),
+                main='Gene Cluster Heatmap (gene scaling)')
+    if (write_output) {
+      png(gene_cluster_heatmap_gene_scaling_out_path)
+      dev.off()}
+    
+    # same as above except no row-wise scaling, making the
+    # between sample differences more obvious
+    sample_scaling_heatmap <-
+      heatmap.2(sig_dge_mtx,
+                Rowv = as.dendrogram(gene_clust),
+                Colv = as.dendrogram(sample_clust),
+                RowSideColors = gene_clust_colors,
+                col = heat_colors, scale = 'none', labRow = NA,
+                density.info = 'none', trace = 'none',
+                cexRow = 1, cexCol = 1, margins = c(5, 5),
+                main='Gene Cluster Heatmap (sample scaling)')
+    if (write_output) {
+      png(gene_cluster_heatmap_sample_scaling_out_path)
+      dev.off()}
+  }
+
 #' # Input paths
 abundance_root_dir <- 
   '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
@@ -695,11 +798,15 @@ dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcan
 dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
 dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
 isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
-gene_cluster_heatmap_gene_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
-gene_cluster_heatmap_sample_scaling <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
+mean_variance_plot_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/mean_variance_trend.png"
+gene_cluster_heatmap_gene_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
+gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
+rendered_file_out_path <- '/media/awmundy/Windows/bio/ac_thymus/outputs/analysis.html'
+# rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
+                  # output_file=rendered_file_out_path)
+
 
 #' # Configuration
-#' 
 sample_dimensions <- c('population', 'age')
 explanatory_variable <- c('population')
 control_label <- 'cx3_neg'
@@ -757,7 +864,6 @@ plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
 
-
 #' # Compare to external sample
 external_data <-
   get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
@@ -766,24 +872,34 @@ plot_external_sample_pca(external_data, pca_scatter_ext_out_path,
                          pca_small_multiples_ext_out_path,
                          write_output)
 
-
+#' # Differential Gene Expression Volcano Plot
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
-mean_variance_weights <- get_mean_variance_gene_weights(dge_list_filt_norm,
-                                                        design_matrix)
+mean_variance_weights <- 
+  plot_and_return_mean_variance_gene_weights(dge_list_filt_norm,
+                                             design_matrix,
+                                             mean_variance_plot_out_path,
+                                             write_output)
 bayes_stats <-
   get_empirical_bayes_differential_expression_stats(mean_variance_weights,
                                                     explanatory_variable,
                                                     experimental_label,
                                                     control_label)
-
 multiple_testing_correction_method <- "BH"
-write_dge_volcano_plot(bayes_stats, multiple_testing_correction_method,
-                       dge_volcano_out_path)
+plot_dge_volcano(bayes_stats, multiple_testing_correction_method,
+                 dge_volcano_out_path, write_output)
 
+#' # Differential Gene Expression Table
 sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats,
                                            multiple_testing_correction_method)
 sig_dge_tbl <- as_tibble(sig_dge_mtx, rownames = "gene_id")
-write_dge_csv_and_datatable(sig_dge_tbl, dge_csv_out_path, dge_datatable_out_path)
+plot_dge_datatable_and_write_csv(sig_dge_tbl, dge_csv_out_path,
+                                 dge_datatable_out_path, write_output)
+
+#' # Gene/Sample Cluster Heatmaps
+plot_gene_cluster_heatmaps(sig_dge_mtx, 
+                           gene_cluster_heatmap_gene_scaling_out_path,
+                           gene_cluster_heatmap_sample_scaling_out_path,
+                           write_output)
 
 # # TODO not working yet
 # # temp_isoform_analysis(study_design, explanatory_variable,
@@ -791,44 +907,3 @@ write_dge_csv_and_datatable(sig_dge_tbl, dge_csv_out_path, dge_datatable_out_pat
 # # 					  fasta_reference_path,
 # # 					  isoform_analysis_out_dir)
 # 
-# #TODO remove, or at least be more deliberate about how many and
-# #which genes to evaluate
-# sig_dge_mtx = sig_dge_mtx[1:10,]
-# 
-# # TODO determine when it makes to cluster (here or earlier)
-# gene_clust <- get_clusters('gene', sig_dge_mtx)
-# sample_clust <- get_clusters('sample', sig_dge_mtx)
-# 
-# # group the clusters, k is the number of sample categories
-# gene_clust_groups <- cutree(gene_clust, k=2)
-# 
-# # convert the cluster groups to colors
-# cluster_colors <- rainbow(length(unique(gene_clust_groups)), start=0.1, end=0.9)
-# cluster_colors <- cluster_colors[as.vector(gene_clust_groups)]
-# heat_colors <- rev(brewer.pal(name="RdBu", n=11))
-# 
-# 
-# # dge static heatmap , scale='row' computes z score that
-# # scales the expression of the rows (genes) to better highlight
-# # between gene differences
-# png(gene_cluster_heatmap_gene_scaling)
-# heatmap.2(sig_dge_mtx,
-# 		      Rowv = as.dendrogram(gene_clust),
-# 		      Colv = as.dendrogram(sample_clust),
-# 		      RowSideColors = cluster_colors,
-# 		      col = heat_colors, scale = 'row', labRow = NA,
-# 		      density.info = "none", trace = "none",
-# 		      cexRow = 1, cexCol = 1, margins = c(5, 5))
-# dev.off()
-# 
-# # same as above except no row-wise scaling, making the
-# # between sample differences more obvious
-# png(gene_cluster_heatmap_sample_scaling)
-# heatmap.2(sig_dge_mtx,
-# 		  Rowv = as.dendrogram(gene_clust),
-# 		  Colv = as.dendrogram(sample_clust),
-# 		  RowSideColors = cluster_colors,
-# 		  col = heat_colors, labRow = NA,
-# 		  density.info = "none", trace = "none",
-# 		  cexRow = 1, cexCol = 1, margins = c(5, 5))
-# dev.off()
