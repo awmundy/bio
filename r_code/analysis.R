@@ -36,6 +36,7 @@ suppressPackageStartupMessages({
 	library(RColorBrewer)
   library(rmarkdown)
   library(ggplot2)
+  library(renv)
 }) 
 
 #' # Functions
@@ -802,8 +803,14 @@ mean_variance_plot_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/mea
 gene_cluster_heatmap_gene_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
 gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
 rendered_file_out_path <- '/media/awmundy/Windows/bio/ac_thymus/outputs/analysis.html'
+
+# for rendering this document as an rmarkdown file
 # rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
                   # output_file=rendered_file_out_path)
+
+# for storing/recording the libraries used in this project, 
+# for docker/reproducibility purposes
+# renv::init(project='/home/awmundy/code/bio/r_code/')
 
 
 #' # Configuration
