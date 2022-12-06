@@ -1,0 +1,8 @@
+name: kb_python
+channels:
+  - defaults
+  - bioconda
+dependencies:
+  - pip
+  - pip:
+      - kb-python
