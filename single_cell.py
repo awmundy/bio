@@ -3,9 +3,12 @@ import os
 
 def build_index_and_transcript_to_gene_mapping(cfg):
     '''
-    Downloads genome, builds index and transcript to gene mapping
+    Downloads a pre-built index and builts a transcript to gene mapping. If the index is
+    already exists, it should not overwrite. This index
     '''
+    # index will be downloaded to this location
     index_path = cfg['index_path']
+    # tx to gene mapping will be built and stored at this location
     tx_to_gene_path = cfg['tx_to_gene_path']
 
     if os.path.exists(index_path) & os.path.exists(tx_to_gene_path):
@@ -29,6 +32,7 @@ def build_single_seq_counts(cfg):
         print(f"Counts already exist from previous kallisto bus run, not recreating. \n "
               f"To recreate them, delete {cfg['kallisto_bus_output_dir']}")
     else:
+        # construct counts in cellranger compatible format
         cmd = f"kb count \
                 -i {cfg['index_path']} \
                 -g {cfg['tx_to_gene_path']} \
