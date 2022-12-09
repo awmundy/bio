@@ -6,3 +6,6 @@ dependencies:
   - pip
   - pip:
       - kb-python
+      - fastparquet
+      - pyarrow
+      - tables
