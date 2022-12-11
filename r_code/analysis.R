@@ -355,16 +355,16 @@ plot_pca_small_multiples <- function(pca_metrics,
 }
 
 describe <- function(df_col) {
-	min_val <- min(df_col)
-	max_val <- max(df_col)
-	mean_val <- mean(df_col)
-	q5 <- quantile(df_col, 0.05)
-	q10 <- quantile(df_col, 0.10)
-	q25 <- quantile(df_col, 0.25)
-	q50 <- quantile(df_col, 0.50)
-	q75 <- quantile(df_col, 0.75)
-	q90 <- quantile(df_col, 0.90)
-	q95 <- quantile(df_col, 0.95)
+	min_val <- min(df_col, na.rm = T)
+	max_val <- max(df_col, na.rm = T)
+	mean_val <- mean(df_col, na.rm = T)
+	q5 <-  quantile(df_col, 0.05, na.rm = T)
+	q10 <- quantile(df_col, 0.10, na.rm = T)
+	q25 <- quantile(df_col, 0.25, na.rm = T)
+	q50 <- quantile(df_col, 0.50, na.rm = T)
+	q75 <- quantile(df_col, 0.75, na.rm = T)
+	q90 <- quantile(df_col, 0.90, na.rm = T)
+	q95 <- quantile(df_col, 0.95, na.rm = T)
 	out <- data.frame(min=min_val, max=max_val, mean=mean_val, 
 					  q5=q5, q10=q10, q25=q25, q50=q50, q75=q75, 
 					  q90=q90, q95=q95, row.names = NULL)
