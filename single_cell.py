@@ -1,5 +1,6 @@
 import subprocess
 import os
+import shutil
 
 def build_index_and_transcript_to_gene_mapping(cfg):
     '''
@@ -59,7 +60,12 @@ cfgs = \
               '10XV3',
           'threads':
               '2',
-          'kallisto_bus_output_dir': '/home/awmundy/Documents/single_cell_starting_folder/kallisto_bus_outputs/'
+          'kallisto_bus_output_dir':
+              '/home/awmundy/Documents/single_cell_starting_folder/kallisto_bus_outputs/',
+          # files need to be on linux for kallisto ref/count to work, need to move them over to
+          # windows at the end
+          'final_output_dir':
+              '/media/awmundy/Windows/bio/diyt/single_cell_data/'
           },
 
         'ac_thymus':
@@ -69,7 +75,11 @@ cfgs = \
 
 cfg = cfgs['diyt']
 
-build_index_and_transcript_to_gene_mapping(cfg)
-build_single_seq_counts(cfg)
+# build_index_and_transcript_to_gene_mapping(cfg)
+# build_single_seq_counts(cfg)
+shutil.move('/home/awmundy/Documents/single_cell_starting_folder/kallisto_bus_outputs',
+            cfg['final_output_dir'])
+shutil.move(cfg['tx_to_gene_path'], cfg['final_output_dir'])
+shutil.move(cfg['index_path'], cfg['final_output_dir'])
 print('Done')
 
