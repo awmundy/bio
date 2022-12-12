@@ -1,15 +1,17 @@
 # Import data into R and filter out empty drops ----
 # Begin by setting up a new RProject in the folder where you just processed your scRNA-seq data with Kb
 suppressPackageStartupMessages({
-library(tidyverse)
-library(DropletUtils)
-library(Seurat) # a huge, powerful, and popular library for analyzing single cell genomic data
-library(Matrix)
-library(scales)
-library(rjson)
-library(R2HTML)
-library(DT)
-library(arrow)
+  library(tidyverse)
+  library(DropletUtils)
+  library(Seurat) # a huge, powerful, and popular library for analyzing single cell genomic data
+  library(Matrix)
+  library(scales)
+  library(rjson)
+  library(R2HTML)
+  library(DT)
+  library(arrow)
+  library(tidyr)
+  library(purrr)
 })
 
 plain_format <- function(x,...) {
@@ -65,13 +67,17 @@ write_barcode_rank_plot <- function(barcode_ranks, barcode_rank_plot_path){
   dev.off()
 }
 
-print_HTML <- function(seq_stats, cell_stats, dir, sample_id){
+print_HTML <- function(seq_meta_df, cell_stats_df, analysis_output_dir, sample_id){
   # Lightly edited version of function in: 
   #   https://github.com/Sarah145/scRNA_pre_process
-  system(paste0('base64 ', dir, '/barcode_rank.png > ', dir, '/barcode_rank.txt'))
-  b64_bc <- readChar(paste0(dir, '/barcode_rank.txt'), file.info(paste0(dir, '/barcode_rank.txt'))$size)
-  target <- HTMLInitFile(dir, filename=paste0(sample_id, '_summary'))
-  HTML('<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">', file=target)
+  system(paste0('base64 ', analysis_output_dir, '/barcode_rank.png > ', 
+                analysis_output_dir, '/barcode_rank.txt'))
+  b64_bc <- readChar(paste0(analysis_output_dir, '/barcode_rank.txt'), 
+                     file.info(paste0(analysis_output_dir, 
+                                      '/barcode_rank.txt'))$size)
+  target <- HTMLInitFile(analysis_output_dir, filename=paste0(sample_id, '_summary'))
+  HTML('<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">', 
+       file=target)
   HTML("<div class='title'>", file=target)
   HTML.title(' Pre-Processing Summary', HR=1, file = target)
   HTML("</div>", file = target)
@@ -80,11 +86,14 @@ print_HTML <- function(seq_stats, cell_stats, dir, sample_id){
   HTML("<div class='boxed' id='left' align='center'>", file=target)
   HTML.title('Sequencing/Alignment Stats', HR=3, file=target)
   HTML('<table style="width:100%">', file=target)
-  HTML(paste('<tr> <td>', seq_stats$stat, '</td> <td align="right">', seq_stats$value, '</td> </tr>'), file=target)
+  HTML(paste('<tr> <td>', seq_meta_df$metric, '</td> 
+             <td align="left">', seq_meta_df$value, 
+             '</td> </tr>'), file=target)
   HTML('</table> <hr>', file=target)
   HTML.title('Cell Stats', HR=3, file=target)
   HTML('<table style="width:100%">', file=target)
-  HTML(paste('<tr> <td>', cell_stats$stat, '</td> <td align="right">', cell_stats$value, '</td> </tr>'), file=target)
+  HTML(paste('<tr> <td>', cell_stats_df$metric, '</td> <td align="right">', 
+             cell_stats_df$value, '</td> </tr>'), file=target)
   HTML('</table>', file=target)
   HTML("</div>", file = target)
   HTML("<div class='boxed' id='right' align='center'>", file=target)
@@ -200,8 +209,11 @@ kb_meta <- c(fromJSON(file = paste0(kallisto_bus_output_dir, 'inspect.json')),
               fromJSON(file = paste0(kallisto_bus_output_dir, 'run_info.json')))
 # get technology used from the kallisto bus call string, e.g. 10XV3
 single_cell_tech <- strsplit(strsplit(kb_meta$call, '-x ')[[1]][2], ' ')[[1]][1]
-
-seq_meta_df <- as_tibble(kb_meta)
+kb_meta <- append(kb_meta, list('single_cell_tech'=single_cell_tech))
+kb_meta[['call']] = NULL
+kb_meta <- purrr::map_chr(kb_meta, as.character)
+kb_meta <- unlist(kb_meta)
+seq_meta_df <- data.frame(metric = names(kb_meta), value = kb_meta)
 seq_meta_df <- map_df(seq_meta_df, prettyNum, big.interval = 3,  big.mark = ",")
 
 n_cells <- ncol(counts)
@@ -233,8 +245,8 @@ cell_stats_df <-
 write_barcode_rank_plot(barcode_ranks, barcode_rank_plot_path)
 
 # # output a HTML summary of the run
-print_HTML(seq_stats = seq_meta_df, cell_stats = cell_stats_df, 
-           dir = analysis_output_dir, sample_id = NULL)
+print_HTML(seq_meta_df, cell_stats_df, 
+           analysis_output_dir, sample_id = NULL)
 
  
 
