@@ -19,35 +19,49 @@ plain_format <- function(x,...) {
   format(x, ..., scientific = FALSE, drop0trailing = TRUE, big.mark = ",")
 }
 
-bc_rank_plot <- function(stats, raw_cells, filt_cells, save){
+write_barcode_rank_plot <- function(barcode_ranks, barcode_rank_plot_path){
   # Lightly edited version of function in: 
   #   https://github.com/Sarah145/scRNA_pre_process
-  cells <- raw_cells %in% filt_cells
-  keep <- !duplicated(stats$total)
-  plot_df <- data.frame(Rx=stats$rank, Tx=stats$total, cell=cells)
+  
+  plot_df <- data.frame(Rank=barcode_ranks$rank, Counts=barcode_ranks$total, 
+                        cell=barcode_ranks$has_cell)
+  
+  # TODO add note for why we drop cells with duped counts
+  keep <- !duplicated(barcode_ranks$total)
   plot_df <- plot_df[keep, ]
-  png(save, width = 700, height = 500)
-  print({
-    ggplot(subset(plot_df, plot_df$Tx >0), aes(x=Rx, y=Tx, col=cell, alpha=cell))+ 
+  plot_df <- subset(plot_df, plot_df$Counts >0)
+  
+  png(barcode_rank_plot_path, width = 700, height = 500)
+  plt <-ggplot(plot_df, 
+           aes(x=Rank, y=Counts, col=cell, alpha=cell)) + 
       geom_point(size=3) + 
-      geom_hline(yintercept = stats@metadata$knee, lty = 2, col = '#0972D5', size=1.5) +
-      annotate("text", x=max(plot_df$Tx), y=stats@metadata$knee+10000, label="Knee", color = "#0972D5", size=5.5) +
-      geom_hline(yintercept = stats@metadata$inflection, lty = 2, col = '#09CFD5', size = 1.5) +
-      annotate("text", x=max(plot_df$Tx), y=stats@metadata$inflection+500, label="Inflection", color = "#09CFD5", size=5.5) +
-      scale_x_log10(labels = plain_format, breaks = trans_breaks("log10", function(x) round(10^x, 0))) + 
-      scale_y_log10(breaks = trans_breaks('log10', function(x) floor(10^x)), labels = plain_format)+
-      scale_color_manual(values = c('#8595A8', '#6406B6'), name = NULL, labels = c("Background", "Cells")) +
+      geom_hline(yintercept = barcode_ranks@metadata$knee, lty = 2, 
+                 col = '#0972D5', size=1.5) +
+      annotate("text", x=max(plot_df$Counts), y=barcode_ranks@metadata$knee+10000,
+               label="Knee", color = "#0972D5", size=5.5) +
+      geom_hline(yintercept = barcode_ranks@metadata$inflection, lty = 2,
+                 col = '#09CFD5', size = 1.5) +
+      annotate("text", x=max(plot_df$Counts),
+               y=barcode_ranks@metadata$inflection+500, label="Inflection",
+               color = "#09CFD5", size=5.5) +
+      scale_x_log10(labels = plain_format,
+                    breaks = trans_breaks("log10", function(x) round(10^x, 0))) +
+      scale_y_log10(breaks = trans_breaks('log10', function(x) floor(10^x)),
+                    labels = plain_format) +
+      scale_color_manual(values = c('#8595A8', '#6406B6'), name = NULL,
+                         labels = c("Background", "Cells")) +
       scale_alpha_manual(values = c(0.5,1)) +
       labs(x = 'Barcodes', y = 'UMI counts', title = 'Barcode Rank Plot') +
-      guides(alpha = "none", colour = guide_legend(reverse = TRUE, override.aes=list(size = 5))) +
-      theme_linedraw() + 
+      guides(alpha = "none",
+             colour = guide_legend(reverse = TRUE, override.aes=list(size = 5))) +
+      theme_linedraw() +
       theme(plot.title = element_text(size=20, hjust=0.5, face = 'bold'),
             axis.title = element_text(size = 18),
             axis.text = element_text(size = 15),
             legend.text = element_text(size=19),
             legend.background = element_rect(fill = 'transparent'),
             legend.position = c(0.15,0.15))
-  })
+  print(plt)
   dev.off()
 }
 
@@ -137,24 +151,30 @@ cellranger_counts_dir <-
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/counts_unfiltered/cellranger/'
 kallisto_bus_output_dir <- 
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/'
-drop_has_cell_probabilities_path <- 
-  '/media/awmundy/Windows/bio/diyt/single_cell_data/analysis/drop_has_cell_probabilities.parquet'
+analysis_output_dir <- '/media/awmundy/Windows/bio/diyt/single_cell_data/analysis/'
+probabilities_drop_has_cell_path <- 
+  paste0(analysis_output_dir, 'probabilities_that_drop_has_cell.parquet')
+cellranger_10x_count_dir <- paste0(analysis_output_dir, 'counts_filtered/')
+barcode_rank_plot_path <- paste0(analysis_output_dir, 'barcode_rank.png')
 
 barcodes <- read.table(paste0(cellranger_counts_dir, 'barcodes.tsv'), sep = '\t', header = F)
+barcodes <- dplyr::rename(barcodes, barcode=V1)
 genes <- read.table(paste0(cellranger_counts_dir, 'genes.tsv'), sep='\t', header=F)
 # must keep as matrix for memory reasons
-counts <- readMM(paste0(cellranger_counts_dir, 'matrix.mtx'))
+# columns are drops, rows are genes
+counts_raw <- readMM(paste0(cellranger_counts_dir, 'matrix.mtx'))
 
 # assign gene ids to each record, assign cell barcodes to each column
-rownames(counts) <- genes[,1]
-colnames(counts) <- barcodes[,1]
+rownames(counts_raw) <- genes[,1]
+colnames(counts_raw) <- barcodes[,1]
 
 # # get FDR adjusted (by BH) p-values for whether the drop contains a cell
 # prob <- as_tibble(emptyDrops(counts))
 # # write out bc it takes some time to run
-# write_parquet(prob, drop_has_cell_probabilities_path)
+# write_parquet(prob, probabilities_drop_has_cell_path)
 
-prob <- read_parquet(drop_has_cell_probabilities_path)
+# TODO how to identify and remove drops with multiple cells?
+prob <- read_parquet(probabilities_drop_has_cell_path)
 # subset to drops that have a cell (using arbitrary .05 adj p value cutoff)
 has_cell_msk <- prob$FDR <= 0.05 
 # drops with low counts of UMI (indicators of RNA present) are 
@@ -162,16 +182,60 @@ has_cell_msk <- prob$FDR <= 0.05
 # remove them in counts
 has_cell_msk[is.na(has_cell_msk)] <- FALSE 
 # subset to just the columns (drops) that have cells
-counts <- counts[, has_cell_msk] 
+counts <- counts_raw[, has_cell_msk] 
+# add flag for if the drop has a cell
+# TODO remove this if we're not using the barcodes object anymore
+barcodes$has_cell <- has_cell_msk
+# write out cellranger style filtered counts output
+write10xCounts(cellranger_10x_count_dir, gene.symbol = rownames(counts), 
+               counts, overwrite=T) 
+# data for a plot showing droplet ranks vs counts (logged for each)
+# - needs raw counts because non-cell drops have background rna we want to 
+#   include in plot
+barcode_ranks <- barcodeRanks(counts_raw)
+barcode_ranks$has_cell <- has_cell_msk
 
-# load run info from JSON files produced by Kb
+# load run info from JSON files produced by kallisto bus
 kb_meta <- c(fromJSON(file = paste0(kallisto_bus_output_dir, 'inspect.json')), 
               fromJSON(file = paste0(kallisto_bus_output_dir, 'run_info.json')))
 # get technology used from the kallisto bus call string, e.g. 10XV3
-single_cell_tech <- strsplit(strsplit(kb$call, '-x ')[[1]][2], ' ')[[1]][1]
+single_cell_tech <- strsplit(strsplit(kb_meta$call, '-x ')[[1]][2], ' ')[[1]][1]
 
 seq_meta_df <- as_tibble(kb_meta)
 seq_meta_df <- map_df(seq_meta_df, prettyNum, big.interval = 3,  big.mark = ",")
+
+n_cells <- ncol(counts)
+# percentage of gene counts that are in drops with cells
+pct_counts_in_cells <- round((sum(counts)/sum(counts_raw))*100, 2) 
+median_total_counts_per_drop_w_cell <- median(colSums(counts))
+med_num_genes_expressed_per_cell <- median(apply(counts, 
+                                                 2, 
+                                                 function(x) sum(x >= 1)))
+tot_genes_detected_in_any_cell <- sum(rowSums(counts)>=1)
+
+cell_stats_df <- 
+  data.frame(metric = c('Number of cells', 
+                        'Pct counts in drops with cells', 
+                        'Median counts per cell', 
+                        'Median genes per cell', 
+                        'Total genes detected in any cell'), 
+                         value = prettyNum(
+                           c(n_cells, 
+                             pct_counts_in_cells, 
+                             median_total_counts_per_drop_w_cell,
+                             med_num_genes_expressed_per_cell, 
+                             tot_genes_detected_in_any_cell), 
+                           big.mark = ','))
+
+
+
+# create barcode rank plot png
+write_barcode_rank_plot(barcode_ranks, barcode_rank_plot_path)
+
+# # output a HTML summary of the run
+print_HTML(seq_stats = seq_meta_df, cell_stats = cell_stats_df, 
+           dir = analysis_output_dir, sample_id = NULL)
+
  
 
 
