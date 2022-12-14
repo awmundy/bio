@@ -183,6 +183,49 @@ filter_seurat_metrics <- function(srt) {
   return(srt)
 }
 
+build_differential_gene_expression_tibble <- function(dge) {
+  
+  dge$pct_point_dif <- dge$pct.1 - dge$pct.2
+  dge <- as_tibble(dge)
+  dge <- dge %>% arrange(desc(avg_log2FC))
+  
+  return(dge)
+}
+
+plot_seurat_dge_datatable <- function(dge) {
+  dt <- datatable(dge,
+                  extensions = c('KeyTable', "FixedHeader"),
+                  caption = 'Cluster Comparisons by Gene',
+                  filter = 'top',
+                  options = list(
+                    keys = TRUE,
+                    searchHighlight = TRUE,
+                    pageLength = 10,
+                    lengthMenu = c("10", "25", "50", "100")
+                  )) 
+  numeric_cols <- purrr::map_lgl(dt$x$data, is.numeric)
+  pct_cols <- grepl('pct', colnames(dt$x$data))
+  dt <- formatRound(dt, numeric_cols, digits = 3)
+  dt <- formatPercentage(dt, cols, digits = 2)
+  print(dt)
+}
+
+plot_seurat_genes_of_interest <- function(srt, genes_of_interest) {
+  # plot genes of interest on umap, color scale is gene expression
+  FeaturePlot(srt, 
+              reduction = "umap", 
+              features = genes_of_interest,
+              pt.size = 0.4, 
+              min.cutoff = 'q10',
+              label = TRUE)  
+}
+
+plot_seurat_top_genes_heatmap <- function(dge, srt){
+  top_dge_by_cluster <- group_by(dge, cluster) %>%
+    top_n(n = 10, wt = avg_log2FC)
+  DoHeatmap(srt, features=top_dge_by_cluster$gene)
+}
+
 cellranger_counts_dir <- 
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/counts_unfiltered/cellranger/'
 kallisto_bus_output_dir <- 
@@ -321,24 +364,12 @@ DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) +
 DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) + 
   ggtitle('UMAP')
 
-dge <- FindAllMarkers(srt, only.pos = TRUE,
-                      min.pct = 0.25, logfc.threshold = 0.25)
-dge$pct_point_dif <- dge$pct.1 - dge$pct.2
-dge <- as_tibble(dge)
-dge <- dge %>% arrange(desc(avg_log2FC))
+dge <- FindAllMarkers(srt, only.pos = TRUE, min.pct = 0.25, 
+                          logfc.threshold = 0.25)
+dge <- build_differential_gene_expression_tibble(dge)
+plot_seurat_dge_datatable(dge)
 
-dt <- datatable(dge,
-                extensions = c('KeyTable', "FixedHeader"),
-                caption = 'Cluster Comparisons by Gene',
-                options = list(
-                  keys = TRUE,
-                  searchHighlight = TRUE,
-                  pageLength = 10,
-                  lengthMenu = c("10", "25", "50", "100")
-                )) 
-cols <- purrr::map_lgl(dt$x$data, is.numeric)
-dt <- formatRound(dt, cols, digits = 3)
-print(dt)
-cols <- grepl('pct', colnames(dt$x$data))
-dt <- formatPercentage(dt, cols, digits = 2)
-print(dt)
+genes_of_interest <- c("IGHM", 'CD79A')
+plot_seurat_genes_of_interest(srt, genes_of_interest)
+
+plot_seurat_top_genes_heatmap(dge, srt)
