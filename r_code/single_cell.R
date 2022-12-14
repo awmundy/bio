@@ -12,6 +12,7 @@ suppressPackageStartupMessages({
   library(arrow)
   library(tidyr)
   library(purrr)
+  library(patchwork)
 })
 
 plain_format <- function(x,...) {
@@ -67,7 +68,8 @@ write_barcode_rank_plot <- function(barcode_ranks, barcode_rank_plot_path){
   dev.off()
 }
 
-print_HTML <- function(seq_meta_df, cell_stats_df, analysis_output_dir, sample_id){
+write_barcode_rank_plot_html <- function(seq_meta_df, cell_stats_df, 
+                                         analysis_output_dir, report_label){
   # Lightly edited version of function in: 
   #   https://github.com/Sarah145/scRNA_pre_process
   system(paste0('base64 ', analysis_output_dir, '/barcode_rank.png > ', 
@@ -75,13 +77,14 @@ print_HTML <- function(seq_meta_df, cell_stats_df, analysis_output_dir, sample_i
   b64_bc <- readChar(paste0(analysis_output_dir, '/barcode_rank.txt'), 
                      file.info(paste0(analysis_output_dir, 
                                       '/barcode_rank.txt'))$size)
-  target <- HTMLInitFile(analysis_output_dir, filename=paste0(sample_id, '_summary'))
+  target <- HTMLInitFile(analysis_output_dir, 
+                         filename=paste0(report_label, '_summary'))
   HTML('<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">', 
        file=target)
   HTML("<div class='title'>", file=target)
   HTML.title(' Pre-Processing Summary', HR=1, file = target)
   HTML("</div>", file = target)
-  HTML.title(sample_id, HR=2, file = target)
+  HTML.title(report_label, HR=2, file = target)
   HTML("<div id='wrapper'>", file=target)
   HTML("<div class='boxed' id='left' align='center'>", file=target)
   HTML.title('Sequencing/Alignment Stats', HR=3, file=target)
@@ -196,7 +199,7 @@ counts <- counts_raw[, has_cell_msk]
 # TODO remove this if we're not using the barcodes object anymore
 barcodes$has_cell <- has_cell_msk
 # write out cellranger style filtered counts output
-write10xCounts(cellranger_10x_count_dir, gene.symbol = rownames(counts), 
+write10xCounts(cellranger_filtered_10x_count_dir, gene.symbol = genes[,2],
                counts, overwrite=T) 
 # data for a plot showing droplet ranks vs counts (logged for each)
 # - needs raw counts because non-cell drops have background rna we want to 
@@ -204,6 +207,7 @@ write10xCounts(cellranger_10x_count_dir, gene.symbol = rownames(counts),
 barcode_ranks <- barcodeRanks(counts_raw)
 barcode_ranks$has_cell <- has_cell_msk
 
+# build sequencing metadata dataframe
 # load run info from JSON files produced by kallisto bus
 kb_meta <- c(fromJSON(file = paste0(kallisto_bus_output_dir, 'inspect.json')), 
               fromJSON(file = paste0(kallisto_bus_output_dir, 'run_info.json')))
