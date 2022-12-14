@@ -158,6 +158,30 @@ write_barcode_rank_plot_html <- function(seq_meta_df, cell_stats_df,
   HTMLEndFile()
 }
 
+plot_seurat_violin <- function(srt, seurat_data_labels) {
+  # TODO consider renaming data objects to Total Molecules Detected (ncount) and 
+  # Genes Detected (nfeature)
+  # TODO for custom x and y labels would need to build violin plots manually
+  # X axis is meaningless, the data is jittered to better see overlapping points
+  VlnPlot(srt, seurat_data_labels, pt.size = 0.1) + 
+  theme(axis.title.x = element_blank()) # removing Identity label at bottom
+}
+
+plot_gene_vs_molecule_count <- function(srt) {
+  ggplot(srt@meta.data, aes(nCount_RNA, nFeature_RNA)) +
+    geom_point(alpha = 0.7, size = 0.5) +
+    labs(x = "Molecule counts per cell", y = "Number of genes detected")
+}
+
+filter_seurat_metrics <- function(srt) {
+  srt <- subset(srt,
+                subset = nCount_RNA < 20000 &
+                  nCount_RNA > 1000 &
+                  nFeature_RNA > 1000 &
+                  Mitochondria_pct < 20)
+  
+  return(srt)
+}
 
 cellranger_counts_dir <- 
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/counts_unfiltered/cellranger/'
@@ -166,7 +190,7 @@ kallisto_bus_output_dir <-
 analysis_output_dir <- '/media/awmundy/Windows/bio/diyt/single_cell_data/analysis/'
 probabilities_drop_has_cell_path <- 
   paste0(analysis_output_dir, 'probabilities_that_drop_has_cell.parquet')
-cellranger_10x_count_dir <- paste0(analysis_output_dir, 'counts_filtered/')
+cellranger_filtered_10x_count_dir <- paste0(analysis_output_dir, 'counts_filtered/')
 barcode_rank_plot_path <- paste0(analysis_output_dir, 'barcode_rank.png')
 
 barcodes <- read.table(paste0(cellranger_counts_dir, 'barcodes.tsv'), sep = '\t', header = F)
@@ -244,14 +268,77 @@ cell_stats_df <-
                            big.mark = ','))
 
 
-
-# create barcode rank plot png
 write_barcode_rank_plot(barcode_ranks, barcode_rank_plot_path)
+write_barcode_rank_plot_html(seq_meta_df, cell_stats_df,
+                             analysis_output_dir, 'barcode_plot_html_example')
 
-# # output a HTML summary of the run
-print_HTML(seq_meta_df, cell_stats_df, 
-           analysis_output_dir, sample_id = NULL)
+exp_mtx <- Read10X(
+  cellranger_filtered_10x_count_dir,
+  gene.column = 2,
+  cell.column = 1,
+  unique.features = TRUE,
+  strip.suffix = FALSE
+)
+srt <- CreateSeuratObject(counts = exp_mtx, min.cells = 3)
+srt@project.name <- "Insert Project Name"
+# normalize the counts stored in srt@assays$RNA@data@x
+srt <- NormalizeData(srt, verbose = FALSE)
+srt <- FindVariableFeatures(srt, verbose = FALSE)
 
- 
+# get pct mitochondrial reads
+# stores in srt@meta.data
+# TODO what are other useful prefixes/patterns in the gene labels
+srt[["Mitochondria_pct"]] <- PercentageFeatureSet(srt, pattern = "^MT-")
+
+# plot_seurat_violin(srt, c("nCount_RNA", "nFeature_RNA", "Mitochondria_pct"))
+
+#TODO determine correct filtering strategy (i.e. when to exclude outliers)
+# srt <- filter_seurat_metrics(srt)
+
+# Gene vs Molecule Count QA
+# A lot of points in lower left may be poor quality cells, a lot in upper 
+# right may mean multi cell drops or truly different cell populations with a 
+# lot going on in them
+# plot_gene_vs_molecule_count(srt)
 
 
+# UMAP dimensionality reduction
+# NOTE: UMAP can be used instead of PCA for the bulk seq, but perhaps not 
+# necessary due to having fewer dimensions (since there are only a handful 
+# of samples, not thousands of cells).
+
+# Create scaling factor object that will center counts around 0, with variance 1
+srt <- ScaleData(srt, verbose = FALSE)
+
+# add PCA and UMAP metrics to the seurat object
+srt <- RunPCA(srt, npcs = 40, verbose = FALSE)
+srt <- RunUMAP(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
+
+srt <- FindNeighbors(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
+srt <- FindClusters(srt, resolution = 0.5)
+DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) + 
+  ggtitle('PCA')
+DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) + 
+  ggtitle('UMAP')
+
+dge <- FindAllMarkers(srt, only.pos = TRUE,
+                      min.pct = 0.25, logfc.threshold = 0.25)
+dge$pct_point_dif <- dge$pct.1 - dge$pct.2
+dge <- as_tibble(dge)
+dge <- dge %>% arrange(desc(avg_log2FC))
+
+dt <- datatable(dge,
+                extensions = c('KeyTable', "FixedHeader"),
+                caption = 'Cluster Comparisons by Gene',
+                options = list(
+                  keys = TRUE,
+                  searchHighlight = TRUE,
+                  pageLength = 10,
+                  lengthMenu = c("10", "25", "50", "100")
+                )) 
+cols <- purrr::map_lgl(dt$x$data, is.numeric)
+dt <- formatRound(dt, cols, digits = 3)
+print(dt)
+cols <- grepl('pct', colnames(dt$x$data))
+dt <- formatPercentage(dt, cols, digits = 2)
+print(dt)
