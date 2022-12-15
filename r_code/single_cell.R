@@ -13,6 +13,21 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(purrr)
   library(patchwork)
+  library(scater)
+  library(scran)
+  library(DropletUtils)
+  # tensorflow installation instructions:
+  # - install.packages tensorflow 
+  # - then tensorflow::install_tensorflow(extra_packages='tensorflow-probability')
+  #   - it may prompt about miniconda, if python is installed outside of 
+  #     miniconda hit no and it should find that python and then install
+  library(tensorflow) 
+  # Note: cellassign not currently working (so no need for tensorflow either)
+  # install instructions: https://github.com/irrationone/cellassign
+  library(cellassign) 
+  library(SingleR) 
+  library(celldex) 
+  library(pheatmap)
 })
 
 plain_format <- function(x,...) {
@@ -206,7 +221,7 @@ plot_seurat_dge_datatable <- function(dge) {
   numeric_cols <- purrr::map_lgl(dt$x$data, is.numeric)
   pct_cols <- grepl('pct', colnames(dt$x$data))
   dt <- formatRound(dt, numeric_cols, digits = 3)
-  dt <- formatPercentage(dt, cols, digits = 2)
+  dt <- formatPercentage(dt, pct_cols, digits = 2)
   print(dt)
 }
 
@@ -225,6 +240,13 @@ plot_seurat_top_genes_heatmap <- function(dge, srt){
     top_n(n = 10, wt = avg_log2FC)
   DoHeatmap(srt, features=top_dge_by_cluster$gene)
 }
+
+plot_genes_of_interest_overlap_across_categories <- 
+  function(genes_of_interest_sce) {
+    pheatmap(genes_of_interest_sce)
+  }
+
+
 
 cellranger_counts_dir <- 
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/counts_unfiltered/cellranger/'
@@ -323,6 +345,7 @@ exp_mtx <- Read10X(
   strip.suffix = FALSE
 )
 srt <- CreateSeuratObject(counts = exp_mtx, min.cells = 3)
+# project.name gets added to plots and can't be removed
 srt@project.name <- "Insert Project Name"
 # normalize the counts stored in srt@assays$RNA@data@x
 srt <- NormalizeData(srt, verbose = FALSE)
@@ -359,17 +382,95 @@ srt <- RunUMAP(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
 
 srt <- FindNeighbors(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
 srt <- FindClusters(srt, resolution = 0.5)
-DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) + 
-  ggtitle('PCA')
-DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) + 
-  ggtitle('UMAP')
+# DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) + 
+#   ggtitle('PCA')
+# DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) + 
+#   ggtitle('UMAP')
 
-dge <- FindAllMarkers(srt, only.pos = TRUE, min.pct = 0.25, 
-                          logfc.threshold = 0.25)
-dge <- build_differential_gene_expression_tibble(dge)
-plot_seurat_dge_datatable(dge)
+# dge <- FindAllMarkers(srt, only.pos = TRUE, min.pct = 0.25, 
+#                           logfc.threshold = 0.25)
+# dge <- build_differential_gene_expression_tibble(dge)
+# plot_seurat_dge_datatable(dge)
 
-genes_of_interest <- c("IGHM", 'CD79A')
-plot_seurat_genes_of_interest(srt, genes_of_interest)
+genes_of_interest_seurat <- c("IGHM", 'CD79A')
+# plot_seurat_genes_of_interest(srt, genes_of_interest_seurat)
+# plot_seurat_top_genes_heatmap(dge, srt)
 
-plot_seurat_top_genes_heatmap(dge, srt)
+# TODO not currently working, look in to
+# read in counts as singleCellExperiment object (using DropletUtils)
+# sce <- read10xCounts(cellranger_filtered_10x_count_dir)
+
+# convert seurat object to singleCellExperiment object
+sce <- as.SingleCellExperiment(srt)
+rowData(sce)$Symbol <- rownames(sce)
+
+# create a list of markers
+# you can find cell specific markers here: http://biocc.hrbmu.edu.cn/CellMarker/
+genes_of_interest_dummies <- list(
+  Monocytes = c("CD14", "CD68"),
+  `T cells` = c("CD2", "CD3D", "TRAC", "IL32", "CD3E", "PTPRC"),
+  `NK cells` = c("GZMK", "KLRF1", "CCL3", "CMC1", "NKG7", "PTPRC"),
+  `Plasma cells` = c("CD27", "IGHG1", "CD79A", "IGHG2", "PTPRC", "IGKC"),
+  `Mature B cells` = c("MS4A1", "LTB", "CD52", "IGHD", "CD79A", "PTPRC", "IGKC"))
+
+# make dummies matrix (rows=genes, cols=gene categories)
+genes_of_interest_dummies <- marker_list_to_mat(genes_of_interest_dummies, 
+                                            include_other = FALSE)
+# plot_genes_of_interest_overlap_across_categories(genes_of_interest_sce)
+
+gene_in_sce_idx <- match(rownames(genes_of_interest_dummies), rowData(sce)$Symbol)
+stopifnot(all(!is.na(gene_in_sce_idx)))
+
+#subset to genes of interest
+sce_subset <- sce[gene_in_sce_idx, ]
+stopifnot(all.equal(rownames(genes_of_interest_dummies), rowData(sce_subset)$Symbol))
+
+# add size factors to sce that are scaling factors used to normalize the data
+#   NOTE: non-positive size factor warning can trigger even when all size 
+#   factors are positive, for some reason
+sce <- scran::computeSumFactors(sce)
+
+# NOTE: Can't get this to work, some bug the cellassign devs attempted to fix,
+#   may be some sort of interaction with the tensorflow version
+
+# # determine cell groupings
+# fit <- cellassign(
+#   exprs_obj = sce_subset,
+#   marker_gene_info = genes_of_interest_dummies,
+#   s = sizeFactors(sce),
+#   shrinkage = TRUE,
+#   max_iter_adam = 50,
+#   min_delta = 2,
+#   verbose = TRUE)
+# 
+# # incorporate the cellAssign result into your singleCellExperiment
+# pbmc.1k.sce$cell_type <- fit$cell_type
+# # plotUMAP is the Scater equivalent of Seurat's DimPlot
+# plotUMAP(pbmc.1k.sce, colour_by = "cell_type")
+
+# alteratively can label clusters with public datasets
+# library also has functions to run across multiple datasets and take best score
+# encode_data <- BlueprintEncodeData(ensembl = FALSE)
+# hpca_data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
+# dice_data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
+# immgen_data <- ImmGenData(ensembl = FALSE)
+# monaco_data <- MonacoImmuneData(ensembl = FALSE)
+# mouserna_data <- MouseRNAseqData(ensembl = FALSE)
+nover_data <- NovershternHematopoieticData(ensembl = FALSE) 
+predictions <- SingleR(test=sce, assay.type.test=1,
+                       ref=nover_data, labels=nover_data$label.main)
+plotScoreHeatmap(predictions)
+
+# store labels and plot umap
+sce[["singler_labels"]] <- predictions$labels
+plotUMAP(sce, colour_by = "singler_labels")
+
+
+
+
+
+
+
+
+
+
