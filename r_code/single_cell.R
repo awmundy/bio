@@ -2,6 +2,7 @@
 # Begin by setting up a new RProject in the folder where you just processed your scRNA-seq data with Kb
 suppressPackageStartupMessages({
   library(tidyverse)
+  library(zeallot)
   library(DropletUtils)
   library(Seurat) # a huge, powerful, and popular library for analyzing single cell genomic data
   library(Matrix)
@@ -15,7 +16,6 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(scater)
   library(scran)
-  library(DropletUtils)
   # tensorflow installation instructions:
   # - install.packages tensorflow 
   # - then tensorflow::install_tensorflow(extra_packages='tensorflow-probability')
@@ -183,6 +183,10 @@ plot_seurat_violin <- function(srt, seurat_data_labels) {
 }
 
 plot_gene_vs_molecule_count <- function(srt) {
+  # Gene vs Molecule Count QA
+  # A lot of points in lower left may be poor quality cells, a lot in upper 
+  # right may mean multi cell drops or truly different cell populations with a 
+  # lot going on in them
   ggplot(srt@meta.data, aes(nCount_RNA, nFeature_RNA)) +
     geom_point(alpha = 0.7, size = 0.5) +
     labs(x = "Molecule counts per cell", y = "Number of genes detected")
@@ -198,7 +202,12 @@ filter_seurat_metrics <- function(srt) {
   return(srt)
 }
 
-build_differential_gene_expression_tibble <- function(dge) {
+build_differential_gene_expression_tibble <- function(srt) {
+  # get differentially epressed genes dataframe for each cluster compared 
+  # to all cells in the other clusters
+  # 
+  dge <- FindAllMarkers(srt, only.pos = TRUE, min.pct = 0.25,
+                        logfc.threshold = 0.25)
   
   dge$pct_point_dif <- dge$pct.1 - dge$pct.2
   dge <- as_tibble(dge)
@@ -246,7 +255,239 @@ plot_genes_of_interest_overlap_across_categories <-
     pheatmap(genes_of_interest_sce)
   }
 
+scale_and_cluster_srt <- function(srt) {
+  # Create scaling factor object that will center counts around 0, with variance 1
+  srt <- ScaleData(srt, verbose = FALSE)
+  
+  # add PCA and UMAP metrics to the seurat object
+  srt <- RunPCA(srt, npcs = 40, verbose = FALSE)
+  srt <- RunUMAP(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
+  
+  srt <- FindNeighbors(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
+  srt <- FindClusters(srt, resolution = 0.5)
+  
+  return(srt)
+}
 
+create_and_prep_seurat_object <- function(exp_mtx, project_name) {
+  
+  srt <- CreateSeuratObject(counts = exp_mtx, min.cells = 3)
+  # project.name gets added to plots and can't be removed
+  srt@project.name <- project_name
+  
+  # normalize the counts stored in srt@assays$RNA@data@x
+  srt <- NormalizeData(srt, verbose = FALSE)
+  
+  # identify outliers
+  srt <- FindVariableFeatures(srt, verbose = FALSE)
+  
+  # get pct mitochondrial reads
+  # stores in srt@meta.data
+  # TODO what are other useful prefixes/patterns in the gene labels
+  srt[["Mitochondria_pct"]] <- PercentageFeatureSet(srt, pattern = "^MT-")
+  
+  srt <- scale_and_cluster_srt(srt)
+  
+  return(srt)
+}
+
+plot_cell_assign_umap <- function(sce) {
+  # NOTE: Can't get this to work, some bug the cellassign devs attempted to fix,
+  #   may be some sort of interaction with the tensorflow version
+  
+  # determine cell groupings
+  fit <- cellassign(
+    exprs_obj = sce_subset,
+    marker_gene_info = genes_of_interest_dummies,
+    s = sizeFactors(sce),
+    shrinkage = TRUE,
+    max_iter_adam = 50,
+    min_delta = 2,
+    verbose = TRUE)
+  
+  # add cellassign mappings to sce object
+  sce$cell_type <- fit$cell_type
+  
+  plotUMAP(sce, colour_by = "cell_type")
+}
+
+add_cluster_predictions_based_on_public_datasets <- 
+  function(sce, public_dataset_label) {
+    # Downloads normalized expression data from public single 
+    # cell rna seq datasets. Then applies cluster annotations 
+    # to a singleCellExperiment object based on the downloaded data
+    
+    if (public_dataset_label == 'encode') {
+      data <- BlueprintEncodeData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'hpca') {
+      data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'dice') {
+      data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'immgen') {
+      data <- ImmGenData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'monaco') {
+      data <- MonacoImmuneData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'mouserna') {
+      data <- MouseRNAseqData(ensembl = FALSE)
+    }
+    else if (public_dataset_label == 'nover') {
+      data <- NovershternHematopoieticData(ensembl = FALSE)
+    }
+    else
+      stop('invalid public_dataset_label')
+    
+    # Label clusters with public datasets
+    # NOTE: library also has functions to run across multiple datasets 
+    # and take best score
+    encode_data <- BlueprintEncodeData(ensembl = FALSE)
+    hpca_data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
+    dice_data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
+    immgen_data <- ImmGenData(ensembl = FALSE)
+    monaco_data <- MonacoImmuneData(ensembl = FALSE)
+    mouserna_data <- MouseRNAseqData(ensembl = FALSE)
+    
+    predictions <- SingleR(
+      test = sce,
+      assay.type.test = 1,
+      ref = public_dataset,
+      labels = public_dataset$label.main
+    )
+    sce[["singler_labels"]] <- predictions$labels
+    
+    return(list(sce, predictions))
+  }
+
+get_cellranger_counts_barcodes_and_genes <-
+  function(cellranger_counts_dir) {
+    barcodes <-
+      read.table(
+        paste0(cellranger_counts_dir, 'barcodes.tsv'),
+        sep = '\t',
+        header = F
+      )
+    barcodes <- dplyr::rename(barcodes, barcode = V1)
+    
+    genes <-
+      read.table(paste0(cellranger_counts_dir, 'genes.tsv'),
+                 sep = '\t',
+                 header = F)
+    
+    # must keep as matrix for memory reasons
+    # columns are drops, rows are genes
+    counts_raw <- readMM(paste0(cellranger_counts_dir, 'matrix.mtx'))
+    
+    # assign gene ids to each record, assign cell barcodes to each column
+    rownames(counts_raw) <- genes[, 1]
+    colnames(counts_raw) <- barcodes[, 1]
+    
+    return(list(counts_raw, barcodes, genes))
+  }
+
+build_drop_has_cell_probabilities <- function(counts, 
+                                            probabilities_drop_has_cell_path) {
+  
+  if (file.exists(probabilities_drop_has_cell_path)) {
+    cell_prob <- read_parquet(probabilities_drop_has_cell_path)
+  } else {
+    # get FDR adjusted (by BH) p-values for whether the drop contains a cell
+    cell_prob <- as_tibble(emptyDrops(counts))
+    # write out bc it takes some time to run
+    write_parquet(prob, probabilities_drop_has_cell_path)
+    
+  }
+  return(cell_prob)
+}
+
+build_has_cell_mask <- function(cell_prob) {
+  # build mask for drops that have a cell (using arbitrary .05 adj p 
+  # value cutoff)
+  has_cell_msk <- cell_prob$FDR <= 0.05 
+  
+  # drops with low counts of UMI (indicators of RNA present) are 
+  # considered empty and assigned null values. Mark FALSE here to 
+  # remove them in counts
+  has_cell_msk[is.na(has_cell_msk)] <- FALSE 
+  
+  return(has_cell_msk)
+  
+}
+
+filter_counts_to_drops_with_cell <- function(cell_prob, counts_raw) {
+  has_cell_msk <- build_has_cell_mask(cell_prob)
+  
+  # subset to just the columns (drops) that have cells
+  counts <- counts_raw[, has_cell_msk] 
+  
+  return(counts)
+}
+
+build_barcode_ranks <- function(counts_raw, cell_prob) {
+  # get data for a plot showing droplet ranks vs counts of 
+  # umi quantity (logged for each)
+  # - needs raw counts because non-cell drops have background 
+  #   rna we want to include in plot
+  barcode_ranks <- barcodeRanks(counts_raw)
+  
+  # add this so that plot can color datapoints based on presence of a cell
+  has_cell_msk <- build_has_cell_mask(cell_prob)
+  barcode_ranks$has_cell <- has_cell_msk
+  
+  return(barcode_ranks)
+}
+
+get_sequencing_metadata_dataframe <- function(kallisto_bus_output_dir) {
+  # build sequencing metadata dataframe
+  # load run info from JSON files produced by kallisto bus
+  kb_meta <- c(fromJSON(file = paste0(kallisto_bus_output_dir, 'inspect.json')), 
+               fromJSON(file = paste0(kallisto_bus_output_dir, 'run_info.json')))
+  # get technology used from the kallisto bus call string, e.g. 10XV3
+  single_cell_tech <- strsplit(strsplit(kb_meta$call, '-x ')[[1]][2], ' ')[[1]][1]
+  kb_meta <- append(kb_meta, list('single_cell_tech'=single_cell_tech))
+  kb_meta[['call']] = NULL
+  kb_meta <- purrr::map_chr(kb_meta, as.character)
+  kb_meta <- unlist(kb_meta)
+  seq_meta_df <- data.frame(metric = names(kb_meta), value = kb_meta)
+  seq_meta_df <- map_df(seq_meta_df, prettyNum, big.interval = 3,  big.mark = ",")
+  
+  return(seq_meta_df)  
+}
+
+get_cell_counts_stats_metadata_dataframe <- function(counts, counts_raw) {
+  n_cells <- ncol(counts)
+  # percentage of gene counts that are in drops with cells
+  pct_counts_in_cells <- round((sum(counts)/sum(counts_raw))*100, 2) 
+  median_total_counts_per_drop_w_cell <- median(colSums(counts))
+  med_num_genes_expressed_per_cell <- 
+    median(apply(counts, 2, function(x) sum(x >= 1)))
+  tot_genes_detected_in_any_cell <- sum(rowSums(counts)>=1)
+  
+  cell_stats_df <- 
+    data.frame(metric = c('Number of cells', 
+                          'Pct counts in drops with cells', 
+                          'Median counts per cell', 
+                          'Median genes per cell', 
+                          'Total genes detected in any cell'), 
+               value = prettyNum(
+                 c(n_cells, 
+                   pct_counts_in_cells, 
+                   median_total_counts_per_drop_w_cell,
+                   med_num_genes_expressed_per_cell, 
+                   tot_genes_detected_in_any_cell), 
+                 big.mark = ','))
+  return(cell_stats_df)
+}
+
+plot_seurat_pca_and_umap_clustering <- function(srt) {
+  DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) +
+    ggtitle('PCA')
+  DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) +
+    ggtitle('UMAP')
+}
 
 cellranger_counts_dir <- 
   '/media/awmundy/Windows/bio/diyt/single_cell_data/kallisto_bus_outputs/counts_unfiltered/cellranger/'
@@ -258,85 +499,29 @@ probabilities_drop_has_cell_path <-
 cellranger_filtered_10x_count_dir <- paste0(analysis_output_dir, 'counts_filtered/')
 barcode_rank_plot_path <- paste0(analysis_output_dir, 'barcode_rank.png')
 
-barcodes <- read.table(paste0(cellranger_counts_dir, 'barcodes.tsv'), sep = '\t', header = F)
-barcodes <- dplyr::rename(barcodes, barcode=V1)
-genes <- read.table(paste0(cellranger_counts_dir, 'genes.tsv'), sep='\t', header=F)
-# must keep as matrix for memory reasons
-# columns are drops, rows are genes
-counts_raw <- readMM(paste0(cellranger_counts_dir, 'matrix.mtx'))
+c(counts_raw, barcodes, genes) %<-% 
+  get_cellranger_counts_barcodes_and_genes(cellranger_counts_dir)
 
-# assign gene ids to each record, assign cell barcodes to each column
-rownames(counts_raw) <- genes[,1]
-colnames(counts_raw) <- barcodes[,1]
+cell_prob <- 
+  build_drop_has_cell_probabilities(counts_raw, probabilities_drop_has_cell_path)
 
-# # get FDR adjusted (by BH) p-values for whether the drop contains a cell
-# prob <- as_tibble(emptyDrops(counts))
-# # write out bc it takes some time to run
-# write_parquet(prob, probabilities_drop_has_cell_path)
+counts <- filter_counts_to_drops_with_cell(cell_prob, counts_raw)
 
-# TODO how to identify and remove drops with multiple cells?
-prob <- read_parquet(probabilities_drop_has_cell_path)
-# subset to drops that have a cell (using arbitrary .05 adj p value cutoff)
-has_cell_msk <- prob$FDR <= 0.05 
-# drops with low counts of UMI (indicators of RNA present) are 
-# considered empty and assigned null values. Mark FALSE here to 
-# remove them in counts
-has_cell_msk[is.na(has_cell_msk)] <- FALSE 
-# subset to just the columns (drops) that have cells
-counts <- counts_raw[, has_cell_msk] 
-# add flag for if the drop has a cell
-# TODO remove this if we're not using the barcodes object anymore
-barcodes$has_cell <- has_cell_msk
 # write out cellranger style filtered counts output
 write10xCounts(cellranger_filtered_10x_count_dir, gene.symbol = genes[,2],
                counts, overwrite=T) 
-# data for a plot showing droplet ranks vs counts (logged for each)
-# - needs raw counts because non-cell drops have background rna we want to 
-#   include in plot
-barcode_ranks <- barcodeRanks(counts_raw)
-barcode_ranks$has_cell <- has_cell_msk
 
-# build sequencing metadata dataframe
-# load run info from JSON files produced by kallisto bus
-kb_meta <- c(fromJSON(file = paste0(kallisto_bus_output_dir, 'inspect.json')), 
-              fromJSON(file = paste0(kallisto_bus_output_dir, 'run_info.json')))
-# get technology used from the kallisto bus call string, e.g. 10XV3
-single_cell_tech <- strsplit(strsplit(kb_meta$call, '-x ')[[1]][2], ' ')[[1]][1]
-kb_meta <- append(kb_meta, list('single_cell_tech'=single_cell_tech))
-kb_meta[['call']] = NULL
-kb_meta <- purrr::map_chr(kb_meta, as.character)
-kb_meta <- unlist(kb_meta)
-seq_meta_df <- data.frame(metric = names(kb_meta), value = kb_meta)
-seq_meta_df <- map_df(seq_meta_df, prettyNum, big.interval = 3,  big.mark = ",")
+barcode_ranks <- build_barcode_ranks(counts_raw, cell_prob)
 
-n_cells <- ncol(counts)
-# percentage of gene counts that are in drops with cells
-pct_counts_in_cells <- round((sum(counts)/sum(counts_raw))*100, 2) 
-median_total_counts_per_drop_w_cell <- median(colSums(counts))
-med_num_genes_expressed_per_cell <- median(apply(counts, 
-                                                 2, 
-                                                 function(x) sum(x >= 1)))
-tot_genes_detected_in_any_cell <- sum(rowSums(counts)>=1)
-
-cell_stats_df <- 
-  data.frame(metric = c('Number of cells', 
-                        'Pct counts in drops with cells', 
-                        'Median counts per cell', 
-                        'Median genes per cell', 
-                        'Total genes detected in any cell'), 
-                         value = prettyNum(
-                           c(n_cells, 
-                             pct_counts_in_cells, 
-                             median_total_counts_per_drop_w_cell,
-                             med_num_genes_expressed_per_cell, 
-                             tot_genes_detected_in_any_cell), 
-                           big.mark = ','))
-
+seq_meta_df <- get_sequencing_metadata_dataframe(kallisto_bus_output_dir)
+cell_stats_df <- get_cell_counts_stats_metadata_dataframe(counts, counts_raw)
 
 write_barcode_rank_plot(barcode_ranks, barcode_rank_plot_path)
 write_barcode_rank_plot_html(seq_meta_df, cell_stats_df,
                              analysis_output_dir, 'barcode_plot_html_example')
 
+# build an expression matrix from the cellranger files on disk
+#   - rows are genes, columns are drops (barcodes)
 exp_mtx <- Read10X(
   cellranger_filtered_10x_count_dir,
   gene.column = 2,
@@ -344,57 +529,25 @@ exp_mtx <- Read10X(
   unique.features = TRUE,
   strip.suffix = FALSE
 )
-srt <- CreateSeuratObject(counts = exp_mtx, min.cells = 3)
-# project.name gets added to plots and can't be removed
-srt@project.name <- "Insert Project Name"
-# normalize the counts stored in srt@assays$RNA@data@x
-srt <- NormalizeData(srt, verbose = FALSE)
-srt <- FindVariableFeatures(srt, verbose = FALSE)
 
-# get pct mitochondrial reads
-# stores in srt@meta.data
-# TODO what are other useful prefixes/patterns in the gene labels
-srt[["Mitochondria_pct"]] <- PercentageFeatureSet(srt, pattern = "^MT-")
+srt <- create_and_prep_seurat_object(exp_mtx,'insert_project_name')
 
-# plot_seurat_violin(srt, c("nCount_RNA", "nFeature_RNA", "Mitochondria_pct"))
+plot_seurat_violin(srt, c("nCount_RNA", "nFeature_RNA", "Mitochondria_pct"))
 
 #TODO determine correct filtering strategy (i.e. when to exclude outliers)
 # srt <- filter_seurat_metrics(srt)
 
-# Gene vs Molecule Count QA
-# A lot of points in lower left may be poor quality cells, a lot in upper 
-# right may mean multi cell drops or truly different cell populations with a 
-# lot going on in them
-# plot_gene_vs_molecule_count(srt)
+plot_gene_vs_molecule_count(srt)
 
+# plot clusters using umap and pca
+plot_seurat_pca_and_umap_clustering(srt)
 
-# UMAP dimensionality reduction
-# NOTE: UMAP can be used instead of PCA for the bulk seq, but perhaps not 
-# necessary due to having fewer dimensions (since there are only a handful 
-# of samples, not thousands of cells).
-
-# Create scaling factor object that will center counts around 0, with variance 1
-srt <- ScaleData(srt, verbose = FALSE)
-
-# add PCA and UMAP metrics to the seurat object
-srt <- RunPCA(srt, npcs = 40, verbose = FALSE)
-srt <- RunUMAP(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
-
-srt <- FindNeighbors(srt, reduction = "pca", dims = 1:40, verbose=FALSE)
-srt <- FindClusters(srt, resolution = 0.5)
-# DimPlot(srt, reduction = "pca", split.by = "orig.ident", label = TRUE) + 
-#   ggtitle('PCA')
-# DimPlot(srt, reduction = "umap", split.by = "orig.ident", label = TRUE) + 
-#   ggtitle('UMAP')
-
-# dge <- FindAllMarkers(srt, only.pos = TRUE, min.pct = 0.25, 
-#                           logfc.threshold = 0.25)
-# dge <- build_differential_gene_expression_tibble(dge)
-# plot_seurat_dge_datatable(dge)
+dge <- build_differential_gene_expression_tibble(srt)
+plot_seurat_dge_datatable(dge)
 
 genes_of_interest_seurat <- c("IGHM", 'CD79A')
-# plot_seurat_genes_of_interest(srt, genes_of_interest_seurat)
-# plot_seurat_top_genes_heatmap(dge, srt)
+plot_seurat_genes_of_interest(srt, genes_of_interest_seurat)
+plot_seurat_top_genes_heatmap(dge, srt)
 
 # TODO not currently working, look in to
 # read in counts as singleCellExperiment object (using DropletUtils)
@@ -402,10 +555,11 @@ genes_of_interest_seurat <- c("IGHM", 'CD79A')
 
 # convert seurat object to singleCellExperiment object
 sce <- as.SingleCellExperiment(srt)
+# for QA checks later
 rowData(sce)$Symbol <- rownames(sce)
 
-# create a list of markers
-# you can find cell specific markers here: http://biocc.hrbmu.edu.cn/CellMarker/
+# create a list of genes of interest
+# cell type specific markers here: http://biocc.hrbmu.edu.cn/CellMarker/
 genes_of_interest_dummies <- list(
   Monocytes = c("CD14", "CD68"),
   `T cells` = c("CD2", "CD3D", "TRAC", "IL32", "CD3E", "PTPRC"),
@@ -414,9 +568,9 @@ genes_of_interest_dummies <- list(
   `Mature B cells` = c("MS4A1", "LTB", "CD52", "IGHD", "CD79A", "PTPRC", "IGKC"))
 
 # make dummies matrix (rows=genes, cols=gene categories)
-genes_of_interest_dummies <- marker_list_to_mat(genes_of_interest_dummies, 
-                                            include_other = FALSE)
-# plot_genes_of_interest_overlap_across_categories(genes_of_interest_sce)
+genes_of_interest_dummies <- marker_list_to_mat(genes_of_interest_dummies,
+                                                include_other = FALSE)
+plot_genes_of_interest_overlap_across_categories(genes_of_interest_sce)
 
 gene_in_sce_idx <- match(rownames(genes_of_interest_dummies), rowData(sce)$Symbol)
 stopifnot(all(!is.na(gene_in_sce_idx)))
@@ -428,49 +582,13 @@ stopifnot(all.equal(rownames(genes_of_interest_dummies), rowData(sce_subset)$Sym
 # add size factors to sce that are scaling factors used to normalize the data
 #   NOTE: non-positive size factor warning can trigger even when all size 
 #   factors are positive, for some reason
-sce <- scran::computeSumFactors(sce)
+sce <- computeSumFactors(sce)
 
-# NOTE: Can't get this to work, some bug the cellassign devs attempted to fix,
-#   may be some sort of interaction with the tensorflow version
+# cellassign not working
+# plot_cell_assign_umap(sce)
 
-# # determine cell groupings
-# fit <- cellassign(
-#   exprs_obj = sce_subset,
-#   marker_gene_info = genes_of_interest_dummies,
-#   s = sizeFactors(sce),
-#   shrinkage = TRUE,
-#   max_iter_adam = 50,
-#   min_delta = 2,
-#   verbose = TRUE)
-# 
-# # incorporate the cellAssign result into your singleCellExperiment
-# pbmc.1k.sce$cell_type <- fit$cell_type
-# # plotUMAP is the Scater equivalent of Seurat's DimPlot
-# plotUMAP(pbmc.1k.sce, colour_by = "cell_type")
-
-# alteratively can label clusters with public datasets
-# library also has functions to run across multiple datasets and take best score
-# encode_data <- BlueprintEncodeData(ensembl = FALSE)
-# hpca_data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
-# dice_data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
-# immgen_data <- ImmGenData(ensembl = FALSE)
-# monaco_data <- MonacoImmuneData(ensembl = FALSE)
-# mouserna_data <- MouseRNAseqData(ensembl = FALSE)
-nover_data <- NovershternHematopoieticData(ensembl = FALSE) 
-predictions <- SingleR(test=sce, assay.type.test=1,
-                       ref=nover_data, labels=nover_data$label.main)
+c(sce, predictions) %<-% 
+  add_cluster_predictions_based_on_public_datasets(sce, 'nover')
 plotScoreHeatmap(predictions)
-
-# store labels and plot umap
-sce[["singler_labels"]] <- predictions$labels
 plotUMAP(sce, colour_by = "singler_labels")
-
-
-
-
-
-
-
-
-
 
