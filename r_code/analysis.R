@@ -250,7 +250,7 @@ plot_pca_scatter <- function(pca_metrics, sample_dimensions,
 		stopif(length(sample_dimension_factor) == 1)
 		
 		# use just odd elements of range so that PCs aren't repeated across plots
-		for(i in seq(1, 6, 2)) {
+		for(i in seq(1, 4, 2)) {
 			first_pc_label = paste('PC', i, sep='')
 			second_pc_label = paste('PC', i + 1, sep='')
 			
