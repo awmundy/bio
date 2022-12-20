@@ -642,6 +642,7 @@ plot_and_return_mean_variance_gene_weights <-
                                      title='Gene Mean Variance',
                                      xaxis=list(title='log2 count + 0.5'),
                                      yaxis=list(title="Sqrt(standard deviation)"))
+  
   if (write_output) {
     htmlwidgets::saveWidget(interactive_plot, mean_variance_plot_out_path)
   } else {
@@ -802,11 +803,13 @@ isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isofor
 mean_variance_plot_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/mean_variance_trend.png"
 gene_cluster_heatmap_gene_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
 gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
-rendered_file_out_path <- '/media/awmundy/Windows/bio/ac_thymus/outputs/analysis.html'
 
-# for rendering this document as an rmarkdown file
+# run in console (while this section is commented out, else: recursion) to 
+# render this document as an rmarkdown file (or html file)
+# library(rmarkdown)
+# rendered_file_out_path <- '/media/awmundy/Windows/bio/ac_thymus/outputs/analysis.html'
 # rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
-                  # output_file=rendered_file_out_path)
+#                   output_file=rendered_file_out_path)
 
 # for storing/recording the libraries used in this project, 
 # for docker/reproducibility purposes
@@ -879,13 +882,16 @@ plot_external_sample_pca(external_data, pca_scatter_ext_out_path,
                          pca_small_multiples_ext_out_path,
                          write_output)
 
-#' # Differential Gene Expression Volcano Plot
+#' # Plot of the Count Mean/Variance Relationship Across Samples for Each Gene 
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 mean_variance_weights <- 
   plot_and_return_mean_variance_gene_weights(dge_list_filt_norm,
                                              design_matrix,
                                              mean_variance_plot_out_path,
                                              write_output)
+
+
+#' # Differential Gene Expression Volcano Plot
 bayes_stats <-
   get_empirical_bayes_differential_expression_stats(mean_variance_weights,
                                                     explanatory_variable,
