@@ -726,8 +726,8 @@ plot_gene_cluster_heatmaps <-
            gene_cluster_heatmap_sample_scaling_out_path,
            write_output) {
     
-    # TODO be more deliberate about how many and
-    # which genes to evaluate
+    # TODO get just the most differentially expressed genes
+    # TODO add gene labels
     sig_dge_mtx = sig_dge_mtx[1:10,]
     
     gene_clust <- get_clusters('gene', sig_dge_mtx)
@@ -819,6 +819,7 @@ gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_t
 #' # Configuration
 sample_dimensions <- c('population', 'age')
 explanatory_variable <- c('population')
+# TODO adult vs young is the more relevant scientific question here
 control_label <- 'cx3_neg'
 experimental_label <- 'cx3_pos'
 # Must be FALSE if knitting to Rmarkdown
@@ -859,10 +860,12 @@ dge_list_filt <- filter_dge_list(dge_list,
 dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
 
 #' # Normalization and Filtering Impact on CPM Distributions
+# TODO remove this since it's not super useful
 plot_log_cpm_filter_norm_impact(dge_list, dge_list_filt, dge_list_filt_norm,
                                 log_cpm_filter_norm_out_path, write_output)
 
 #' # Sample Cluster Dendogram
+# TODO Consider this QC bc PCA is better from a clustering perspective
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
                               cluster_out_path, write_output)
@@ -884,6 +887,7 @@ plot_external_sample_pca(external_data, pca_scatter_ext_out_path,
 
 #' # Plot of the Count Mean/Variance Relationship Across Samples for Each Gene 
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
+# TODO mean variance plot should be a QC thing only
 mean_variance_weights <- 
   plot_and_return_mean_variance_gene_weights(dge_list_filt_norm,
                                              design_matrix,
@@ -897,11 +901,14 @@ bayes_stats <-
                                                     explanatory_variable,
                                                     experimental_label,
                                                     control_label)
+# TODO produce an additional one with .05 cutoff
 multiple_testing_correction_method <- "BH"
 plot_dge_volcano(bayes_stats, multiple_testing_correction_method,
                  dge_volcano_out_path, write_output)
 
 #' # Differential Gene Expression Table
+# TODO consider adding a table that has the most differentially expressed 
+# genes across control vs experiment
 sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats,
                                            multiple_testing_correction_method)
 sig_dge_tbl <- as_tibble(sig_dge_mtx, rownames = "gene_id")
