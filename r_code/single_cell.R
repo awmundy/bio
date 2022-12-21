@@ -1,5 +1,3 @@
-# Import data into R and filter out empty drops ----
-# Begin by setting up a new RProject in the folder where you just processed your scRNA-seq data with Kb
 suppressPackageStartupMessages({
   library(tidyverse)
   library(zeallot)
@@ -284,6 +282,7 @@ create_and_prep_seurat_object <- function(exp_mtx, project_name) {
   # get pct mitochondrial reads
   # stores in srt@meta.data
   # TODO what are other useful prefixes/patterns in the gene labels
+  # TODO consider just using Gene Ontology ones for consistency
   srt[["Mitochondria_pct"]] <- PercentageFeatureSet(srt, pattern = "^MT-")
   
   srt <- scale_and_cluster_srt(srt)
@@ -291,7 +290,7 @@ create_and_prep_seurat_object <- function(exp_mtx, project_name) {
   return(srt)
 }
 
-plot_cell_assign_umap <- function(sce) {
+plot_cell_assign_umap <- function(sce, sce_subset) {
   # NOTE: Can't get this to work, some bug the cellassign devs attempted to fix,
   #   may be some sort of interaction with the tensorflow version
   
@@ -316,46 +315,32 @@ add_cluster_predictions_based_on_public_datasets <-
     # Downloads normalized expression data from public single 
     # cell rna seq datasets. Then applies cluster annotations 
     # to a singleCellExperiment object based on the downloaded data
+    # NOTE: library also has functions to run across multiple datasets 
+    # and take best score
     
     if (public_dataset_label == 'encode') {
       data <- BlueprintEncodeData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'hpca') {
+    } else if (public_dataset_label == 'hpca') {
       data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'dice') {
+    } else if (public_dataset_label == 'dice') {
       data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'immgen') {
+    } else if (public_dataset_label == 'immgen') {
       data <- ImmGenData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'monaco') {
+    } else if (public_dataset_label == 'monaco') {
       data <- MonacoImmuneData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'mouserna') {
+    } else if (public_dataset_label == 'mouserna') {
       data <- MouseRNAseqData(ensembl = FALSE)
-    }
-    else if (public_dataset_label == 'nover') {
+    } else if (public_dataset_label == 'nover') {
       data <- NovershternHematopoieticData(ensembl = FALSE)
-    }
-    else
+    } else {
       stop('invalid public_dataset_label')
-    
-    # Label clusters with public datasets
-    # NOTE: library also has functions to run across multiple datasets 
-    # and take best score
-    encode_data <- BlueprintEncodeData(ensembl = FALSE)
-    hpca_data <- HumanPrimaryCellAtlasData(ensembl = FALSE)
-    dice_data <- DatabaseImmuneCellExpressionData(ensembl = FALSE)
-    immgen_data <- ImmGenData(ensembl = FALSE)
-    monaco_data <- MonacoImmuneData(ensembl = FALSE)
-    mouserna_data <- MouseRNAseqData(ensembl = FALSE)
+    }
     
     predictions <- SingleR(
       test = sce,
       assay.type.test = 1,
-      ref = public_dataset,
-      labels = public_dataset$label.main
+      ref = data,
+      labels = data$label.main
     )
     sce[["singler_labels"]] <- predictions$labels
     
@@ -537,6 +522,7 @@ plot_seurat_violin(srt, c("nCount_RNA", "nFeature_RNA", "Mitochondria_pct"))
 #TODO determine correct filtering strategy (i.e. when to exclude outliers)
 # srt <- filter_seurat_metrics(srt)
 
+# TODO this is QC
 plot_gene_vs_molecule_count(srt)
 
 # plot clusters using umap and pca
@@ -570,7 +556,7 @@ genes_of_interest_dummies <- list(
 # make dummies matrix (rows=genes, cols=gene categories)
 genes_of_interest_dummies <- marker_list_to_mat(genes_of_interest_dummies,
                                                 include_other = FALSE)
-plot_genes_of_interest_overlap_across_categories(genes_of_interest_sce)
+plot_genes_of_interest_overlap_across_categories(genes_of_interest_dummies)
 
 gene_in_sce_idx <- match(rownames(genes_of_interest_dummies), rowData(sce)$Symbol)
 stopifnot(all(!is.na(gene_in_sce_idx)))
@@ -585,7 +571,7 @@ stopifnot(all.equal(rownames(genes_of_interest_dummies), rowData(sce_subset)$Sym
 sce <- computeSumFactors(sce)
 
 # cellassign not working
-# plot_cell_assign_umap(sce)
+# plot_cell_assign_umap(sce, sce_subset)
 
 c(sce, predictions) %<-% 
   add_cluster_predictions_based_on_public_datasets(sce, 'nover')
