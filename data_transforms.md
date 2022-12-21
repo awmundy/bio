@@ -1,6 +1,17 @@
+### Kallisto Index
+- Description:
+  - Constructs an kallisto index file based on a reference cDNA genome
+- Inputs:
+  - Referece genome fasta file
+Purpose:
+  - Speeds up downstream kallisto abundance calculations
+
 ### Kallisto Quant
 - Description:
   - Calculates transcript abundance, which is the estimated frequency of transcripts in the sample
+- Inputs:
+  - Kallisto Index file
+  - Bulk RNAseq fastq files
 - Purpose:
   - To summarize the transcript distribution
 - Record Level:
@@ -71,8 +82,7 @@
   - Uses Trimmed Mean of M values (TMM) to build sample level normalization factors and
     store them in the sample level df
 - Purpose:
-  - TMM controls for differences in library sizes (read depth) and trims highly expressed genes'
-    counts to mitigate crowding out on the sequencing machine
+  - TMM controls for differences in library sizes (read depth) and trims highly expressed genes' counts to mitigate crowding out on the sequencing machine
   - Allows comparisons across samples
 - Record Level (Expression):
   - Gene
@@ -93,7 +103,8 @@
     - Heteroskedasticity makes comparing highly expressed genes across samples challenging
     - Log transforming the counts mitigates this, although the resulting dataset is
       slightly heteroskedastic towards lowly expressed genes
-  - Log2CPM TODO fill in
+  - CPM allows for comparisons between samples by controlling for different amounts of reads 
+    in each sample
 
 
 ### voom
@@ -101,11 +112,17 @@ Description:
   - Using a supplied design matrix and DGEList object, variance stabilizes the CPM.
   - Currently requires counts not CPM and performs the log2CPM itself, duplicatively
     with the previous CPM step
+  - Voom fits a model to how the average logcpm across samples for each gene predicts 
+    the square root of the standard deviation across samples for each gene
+  - This mean-variance trend line is then used to produce weights for each gene/sample
+    observation
 Purpose:
+  - Variance of counts may be different across samples, so for cross-sample comparisons 
+    this is useful. The weights from voom are used downstream
 - Record Level:
   - Gene
 - Unit :
-  - Log2CPM, variance stabilized
+  - Log2CPM, with weights in the object to be used for variance stabilization
 
 
 ### lmFit
