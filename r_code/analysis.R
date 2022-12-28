@@ -773,17 +773,23 @@ get_clusters <- function(cluster_type, sig_dge_mtx) {
 }
 
 plot_gene_cluster_heatmaps <- 
-  function(sig_dge_mtx,
+  function(sig_dge,
+           log_cpm_filt_norm,
            gene_cluster_heatmap_gene_scaling_out_path,
            gene_cluster_heatmap_sample_scaling_out_path,
            write_output) {
     
-    # TODO get just the most differentially expressed genes
-    # TODO add gene labels
-    sig_dge_mtx = sig_dge_mtx[1:10,]
+    sig_dge_high_lfc <- head(sig_dge[order(-sig_dge$logFC),], 10)
+    sig_dge_low_lfc <- head(sig_dge[order(sig_dge$logFC),], 10)
+    sig_dge_subset <- rbind(sig_dge_high_lfc, sig_dge_low_lfc)
+    # subset to just sample logfc cols to do cluster correlations
+    sig_dge_subset <- sig_dge_subset[, colnames(log_cpm_filt_norm)]
+    row.names(sig_dge_subset) <- sig_dge_subset$gene_id
+    sig_dge_subset <- subset(sig_dge_subset, select=-c(gene_id))
+    sig_dge_subset <- as.matrix(sig_dge_subset)
     
-    gene_clust <- get_clusters('gene', sig_dge_mtx)
-    sample_clust <- get_clusters('sample', sig_dge_mtx)
+    gene_clust <- get_clusters('gene', sig_dge_subset)
+    sample_clust <- get_clusters('sample', sig_dge_subset)
     
     # group the clusters, k is the number of sample categories
     gene_clust_groups <- cutree(gene_clust, k=2)
@@ -798,13 +804,12 @@ plot_gene_cluster_heatmaps <-
     # dge static heatmap , scale='row' computes z score that
     # scales the expression of the rows (genes) to better highlight
     # between gene differences
-    
     gene_scaling_heatmap <-
-      heatmap.2(sig_dge_mtx,
+      heatmap.2(sig_dge_subset,
                 Rowv = as.dendrogram(gene_clust),
                 Colv = as.dendrogram(sample_clust),
                 RowSideColors = gene_clust_colors,
-                col = heat_colors, scale = 'row', labRow = NA,
+                col = heat_colors, scale = 'row',
                 density.info = 'none', trace = 'none',
                 cexRow = 1, cexCol = 1, margins = c(5, 5),
                 main='Gene Cluster Heatmap (gene scaling)')
@@ -815,11 +820,11 @@ plot_gene_cluster_heatmaps <-
     # same as above except no row-wise scaling, making the
     # between sample differences more obvious
     sample_scaling_heatmap <-
-      heatmap.2(sig_dge_mtx,
+      heatmap.2(sig_dge_subset,
                 Rowv = as.dendrogram(gene_clust),
                 Colv = as.dendrogram(sample_clust),
                 RowSideColors = gene_clust_colors,
-                col = heat_colors, scale = 'none', labRow = NA,
+                col = heat_colors, scale = 'none',
                 density.info = 'none', trace = 'none',
                 cexRow = 1, cexCol = 1, margins = c(5, 5),
                 main='Gene Cluster Heatmap (sample scaling)')
@@ -922,19 +927,6 @@ log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
                                                    design_matrix)
 
-#' # QC
-plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
-                                         dge_list_filt_norm,
-                                         filtering_and_normalizing_impact_out_path, 
-                                         write_output)
-
-plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
-                              sample_cluster_out_path, write_output)
-
-plot_mean_variance_distribution(mean_variance_weights, 
-                                mean_variance_plot_out_path,
-                                write_output)
-
 #' # Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
@@ -955,7 +947,7 @@ if (compare_to_external_data) {
   )
 }
 
-#' # Differential Gene Expression Volcano Plot
+#' # Build Differential Gene Expression Dataframe
 bayes_stats <-
   get_empirical_bayes_differential_expression_stats(mean_variance_weights,
                                                     explanatory_variable,
@@ -972,6 +964,8 @@ all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                          'topTable',
                                          min_lfc = 0,
                                          max_p_val = 1.0)
+
+#' # Differential Gene Expression Volcano Plots
 plot_dge_volcano(sig_dge, 
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path, 
@@ -982,20 +976,33 @@ plot_dge_volcano(all_dge,
                  write_output)
 
 #' # Differential Gene Expression Table
-
 # merge gene level df with sample cols with gene level df with significance info
-sig_dge_merged <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
+sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
 # throw error if any row of sig_dge failed to find a merge
-stopifnot(sum(is.na(sig_dge_merged[colnames(log_cpm_filt_norm[2])])))
+stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
 
-plot_dge_datatable_and_write_csv(sig_dge_merged, dge_csv_out_path,
+plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
                                  dge_datatable_out_path, write_output)
 
 #' # Gene/Sample Cluster Heatmaps
-plot_gene_cluster_heatmaps(sig_dge_mtx, 
+plot_gene_cluster_heatmaps(sig_dge, 
+                           log_cpm_filt_norm,
                            gene_cluster_heatmap_gene_scaling_out_path,
                            gene_cluster_heatmap_sample_scaling_out_path,
                            write_output)
+
+#' # QC
+plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
+                                         dge_list_filt_norm,
+                                         filtering_and_normalizing_impact_out_path, 
+                                         write_output)
+
+plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
+                              sample_cluster_out_path, write_output)
+
+plot_mean_variance_distribution(mean_variance_weights, 
+                                mean_variance_plot_out_path,
+                                write_output)
 
 # # TODO not working yet
 # # temp_isoform_analysis(study_design, explanatory_variable,
