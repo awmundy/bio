@@ -96,6 +96,7 @@ build_log_cpm_df <- function(dge_list, long) {
   
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
+  log_cpm$gene_id <- gsub('"', "", log_cpm$gene_id)
 
   if (long == TRUE) {
     sample_cols <- colnames(log_cpm)[-1]
@@ -503,40 +504,58 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-plot_dge_volcano <- function(bayes_stats,
+build_volcano_plot <- function(dge_top_volcano_input,
+                               title) {
+  
+  vplot <- ggplot(dge_top_volcano_input) +
+    aes(y = adj.P.Val,
+        x = logFC,
+        text = paste("Symbol:", gene_id)) +
+    geom_point(size = 2) +
+    labs(title = title,
+         # subtitle = "Insert Subtitle",
+         caption = paste0("produced on ", Sys.time())) +
+    theme_bw()
+  
+  # write interactive plot
+  interactive_vplot <- plotly::ggplotly(vplot)
+  
+  return(interactive_vplot)
+}
+
+
+get_topTable_dge <- function(bayes_stats,
                              multiple_testing_correction_method,
+                             min_lfc,
+                             max_p_val) {
+  # adjust p values and get dataframe of genes sorted by abs log fold change,
+  sig_dge <- topTable(
+    bayes_stats,
+    adjust = multiple_testing_correction_method,
+    coef = 1,
+    number = 999999,
+    lfc = min_lfc
+  )
+  
+  sig_dge <- as_tibble(sig_dge, rownames='gene_id')
+  sig_dge <- dplyr::filter(sig_dge, adj.P.Val <= max_p_val)
+  
+  return(sig_dge)
+}
+
+plot_dge_volcano <- function(dge,
+                             title,
                              dge_volcano_out_path,
                              write_output) {
-  # adjust p values and get dataframe of genes sorted by abs log fold change,
-  # then build plot
-  dge_top_volcano_input <- topTable(bayes_stats, 
-                                    adjust=multiple_testing_correction_method,
-                                    coef=1, number=40000, sort.by="logFC")
   
-  dge_top_volcano_input <- as_tibble(dge_top_volcano_input, rownames='gene_id')
-	# gt(deg) # pretty table
-	
-	# now plot
-	vplot <- ggplot(dge_top_volcano_input) +
-		# aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-		aes(y=adj.P.Val, x=logFC, text = paste("Symbol:", gene_id)) +
-		geom_point(size=2) +
-		#geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", size=1) +
-		#geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
-		#geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
-		#annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
-		#annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
-		labs(title="Volcano plot",
-			 # subtitle = "Insert Subtitle",
-			 caption=paste0("produced on ", Sys.time())) +
-		theme_bw()
-	
-	# write interactive plot
-	interactive_vplot <- plotly::ggplotly(vplot)
+  vplot <- build_volcano_plot(dge, title)
+  # vplot_sig <- build_volcano_plot(dge_top_volcano_input_sig, 
+                                  # 'Signficantly Differentially Expressed Genes')
+  
 	if (write_output) {
-	  htmlwidgets::saveWidget(interactive_vplot, dge_volcano_out_path)
+	  htmlwidgets::saveWidget(vplot, dge_volcano_out_path)
 	  } else {
-	    interactive_vplot
+	    print(vplot)
 	  }
 }
 
@@ -697,17 +716,37 @@ get_empirical_bayes_differential_expression_stats <-
   }
 
 get_sig_dif_expressed_genes <- function(bayes_stats, 
-                                        multiple_testing_correction_method) {
-  # using bayes_stats- the fitted model object (that includes the 
-  # contrast matrix)- get a gene-level table showing whether the gene was 
-  # significantly negative, sig positive, or not sig
-  all_dge <- decideTests(bayes_stats, method="global", 
-                         adjust.method=multiple_testing_correction_method,
-                         p.value=0.05, lfc=2)
-  # subset to just the genes that were significantly differently expressed
-  sig_dge_mtx <- mean_variance_weights$E[all_dge[,1] !=0,]
+                                        multiple_testing_correction_method,
+                                        significance_function,
+                                        min_lfc,
+                                        max_p_val
+                                        ) {
   
-  return(sig_dge_mtx)
+  if (significance_function == 'decideTests') {
+    # using bayes_stats- the fitted model object (that includes the 
+    # contrast matrix)- get a gene-level table showing whether the gene was 
+    # significantly negative, sig positive, or not sig with respect to each 
+    # coefficient in the contrast matrix
+    all_dge <- decideTests(bayes_stats, method = "global",
+                           adjust.method = multiple_testing_correction_method,
+                           p.value = max_p_val, 
+                           lfc = min_lfc)
+    all_dge <- as_tibble(all_dge, rownames = 'gene_id')
+  } else if (significance_function == 'topTable') {
+    all_dge <- get_topTable_dge(bayes_stats,
+                                multiple_testing_correction_method,
+                                min_lfc,
+                                max_p_val)
+  }
+  else {
+    stop('Invalid significance function')
+  }
+  # subset to just the genes that were significantly differently expressed
+  # TODO use something other than mean variance weights$E object if that makes sense
+  # and pass it in here
+  # sig_dge_mtx <- mean_variance_weights$E[all_dge[,1] !=0,]
+  
+  return(all_dge)
 }
 
 get_clusters <- function(cluster_type, sig_dge_mtx) {
@@ -829,6 +868,7 @@ pca_scatter_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_sc
 pca_small_multiples_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
 sample_cluster_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/sample_cluster.pdf"
 dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
+dge_volcano_sig_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano_sig.html"
 dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
 dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
 isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
@@ -854,6 +894,7 @@ explanatory_variable <- c('population')
 # TODO adult vs young is the more relevant scientific question here
 control_label <- 'cx3_neg'
 experimental_label <- 'cx3_pos'
+multiple_testing_correction_method <- "BH"
 # Must be FALSE if knitting to Rmarkdown
 write_output <- FALSE
 compare_to_external_data <- FALSE
@@ -922,10 +963,25 @@ bayes_stats <-
                                                     explanatory_variable,
                                                     experimental_label,
                                                     control_label)
-# TODO produce an additional one with .05 cutoff
-multiple_testing_correction_method <- "BH"
-plot_dge_volcano(bayes_stats, multiple_testing_correction_method,
-                 dge_volcano_out_path, write_output)
+
+sig_dge <- get_sig_dif_expressed_genes(bayes_stats,
+                                       multiple_testing_correction_method,
+                                       'topTable',
+                                       min_lfc = 2,
+                                       max_p_val = 0.05)
+all_dge <- get_sig_dif_expressed_genes(bayes_stats, 
+                                         multiple_testing_correction_method,
+                                         'topTable',
+                                         min_lfc = 0,
+                                         max_p_val = 1.0)
+plot_dge_volcano(sig_dge, 
+                 'Significantly Differentially Expressed Genes',
+                 dge_volcano_sig_out_path, 
+                 write_output)
+plot_dge_volcano(all_dge, 
+                 'All Genes',
+                 dge_volcano_out_path, 
+                 write_output)
 
 #' # Differential Gene Expression Table
 # TODO consider adding a table that has the most differentially expressed 
