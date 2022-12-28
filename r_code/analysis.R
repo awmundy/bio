@@ -555,7 +555,7 @@ plot_dge_volcano <- function(dge,
 	if (write_output) {
 	  htmlwidgets::saveWidget(vplot, dge_volcano_out_path)
 	  } else {
-	    print(vplot)
+	    vplot
 	  }
 }
 
@@ -673,7 +673,7 @@ plot_mean_variance_distribution <- function(mean_variance_weights,
   interactive_plot <- plotly::ggplotly(plt)
   # add titles/labels here due to bug in ggplotly
   interactive_plot <- plotly::layout(interactive_plot, 
-                                     title='Gene Mean Variance',
+                                     title='Gene Mean vs Variance Across Samples',
                                      xaxis=list(title='log2 count + 0.5'),
                                      yaxis=list(title="Sqrt(standard deviation)"))
   
@@ -707,7 +707,7 @@ get_empirical_bayes_differential_expression_stats <-
     contrast_stats <- contrasts.fit(linear_stats, contrast_matrix)
     
     # uses empirical bayes method to produce p values and other statistics 
-    # showing whether each gene has a log fold change greater than fc
+    # showing whether each gene has a log fold change greater than 0
     bayes_stats <- eBayes(contrast_stats)
     
     return(bayes_stats)
@@ -779,9 +779,14 @@ plot_gene_cluster_heatmaps <-
            gene_cluster_heatmap_sample_scaling_out_path,
            write_output) {
     
-    sig_dge_high_lfc <- head(sig_dge[order(-sig_dge$logFC),], 10)
-    sig_dge_low_lfc <- head(sig_dge[order(sig_dge$logFC),], 10)
-    sig_dge_subset <- rbind(sig_dge_high_lfc, sig_dge_low_lfc)
+    # subset to genes with highest/lowest lfc if necessary
+    if (nrow(sig_dge) > 20) {
+      sig_dge_high_lfc <- head(sig_dge[order(-sig_dge$logFC),], 10)
+      sig_dge_low_lfc <- head(sig_dge[order(sig_dge$logFC),], 10)
+      sig_dge_subset <- rbind(sig_dge_high_lfc, sig_dge_low_lfc)
+    } else {
+      sig_dge_subset <- sig_dge
+    }
     # subset to just sample logfc cols to do cluster correlations
     sig_dge_subset <- sig_dge_subset[, colnames(log_cpm_filt_norm)]
     row.names(sig_dge_subset) <- sig_dge_subset$gene_id
@@ -864,20 +869,34 @@ archs4_rnaseq_path <-
   '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
 
 #' # Output_paths
-filtering_and_normalizing_impact_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
-pca_scatter_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
-pca_small_multiples_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
-pca_scatter_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter_ext.pdf"
-pca_small_multiples_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
-sample_cluster_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/sample_cluster.pdf"
-dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
-dge_volcano_sig_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano_sig.html"
-dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
-dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
-isoform_analysis_out_dir <- "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
-mean_variance_plot_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/mean_variance_trend.png"
-gene_cluster_heatmap_gene_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
-gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
+filtering_and_normalizing_impact_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
+pca_scatter_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
+pca_small_multiples_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
+pca_scatter_ext_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter_ext.pdf"
+pca_small_multiples_ext_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
+sample_cluster_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/sample_cluster.pdf"
+dge_volcano_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
+dge_volcano_sig_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano_sig.html"
+dge_csv_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
+dge_datatable_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
+isoform_analysis_out_dir <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
+mean_variance_plot_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/mean_variance_trend.png"
+gene_cluster_heatmap_gene_scaling_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
+gene_cluster_heatmap_sample_scaling_out_path <- 
+  "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
 
 # run in console (while this section is commented out, else: recursion) to 
 # render this document as an rmarkdown file (or html file)
@@ -893,8 +912,10 @@ gene_cluster_heatmap_sample_scaling_out_path <- "/media/awmundy/Windows/bio/ac_t
 
 #' # Configuration
 sample_dimensions <- c('population', 'age')
+# explanatory_variable <- c('age')
+# control_label <- 'old'
+# experimental_label <- 'young'
 explanatory_variable <- c('population')
-# TODO adult vs young is the more relevant scientific question here
 control_label <- 'cx3_neg'
 experimental_label <- 'cx3_pos'
 multiple_testing_correction_method <- "BH"
@@ -933,19 +954,6 @@ plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
-
-#' # Compare to external sample
-if (compare_to_external_data) {
-  external_data <-
-    get_external_sample_data_and_study_design(archs4_rnaseq_path)
-  
-  plot_external_sample_pca(
-    external_data,
-    pca_scatter_ext_out_path,
-    pca_small_multiples_ext_out_path,
-    write_output
-  )
-}
 
 #' # Build Differential Gene Expression Dataframe
 bayes_stats <-
@@ -1003,6 +1011,18 @@ plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels,
 plot_mean_variance_distribution(mean_variance_weights, 
                                 mean_variance_plot_out_path,
                                 write_output)
+
+if (compare_to_external_data) {
+  external_data <-
+    get_external_sample_data_and_study_design(archs4_rnaseq_path)
+  
+  plot_external_sample_pca(
+    external_data,
+    pca_scatter_ext_out_path,
+    pca_small_multiples_ext_out_path,
+    write_output
+  )
+}
 
 # # TODO not working yet
 # # temp_isoform_analysis(study_design, explanatory_variable,
