@@ -982,12 +982,13 @@ plot_dge_volcano(all_dge,
                  write_output)
 
 #' # Differential Gene Expression Table
-# TODO consider adding a table that has the most differentially expressed 
-# genes across control vs experiment
-sig_dge_mtx <- get_sig_dif_expressed_genes(bayes_stats,
-                                           multiple_testing_correction_method)
-sig_dge_tbl <- as_tibble(sig_dge_mtx, rownames = "gene_id")
-plot_dge_datatable_and_write_csv(sig_dge_tbl, dge_csv_out_path,
+
+# merge gene level df with sample cols with gene level df with significance info
+sig_dge_merged <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
+# throw error if any row of sig_dge failed to find a merge
+stopifnot(sum(is.na(sig_dge_merged[colnames(log_cpm_filt_norm[2])])))
+
+plot_dge_datatable_and_write_csv(sig_dge_merged, dge_csv_out_path,
                                  dge_datatable_out_path, write_output)
 
 #' # Gene/Sample Cluster Heatmaps
