@@ -682,8 +682,6 @@ plot_mean_variance_distribution <- function(mean_variance_weights,
   } else {
     interactive_plot
   }
-
-  return(mean_variance_weights)
 }
 
 get_empirical_bayes_differential_expression_stats <- 
