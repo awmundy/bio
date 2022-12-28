@@ -213,7 +213,7 @@ convert_tibble_to_mtx <- function(tbl, row_names_col) {
 	return(mtx)
 }
 
-plot_sample_cluster_dendogram <- function(tbl, sample_labels, cluster_out_path,
+plot_sample_cluster_dendogram <- function(tbl, sample_labels, sample_cluster_out_path,
                                           write_output) {
 	## writes a dendogram cluster  plot for a gene level dataset where 
 	##	the headers are sample_labels
@@ -229,7 +229,7 @@ plot_sample_cluster_dendogram <- function(tbl, sample_labels, cluster_out_path,
 	
 	# build dendogram and write
 	if (write_output) {
-	  pdf(cluster_out_path)
+	  pdf(sample_cluster_out_path)
 	  plot(clusters, labels=sample_labels)
 	  dev.off()
 	} else {
@@ -372,22 +372,25 @@ describe <- function(df_col) {
 	return(out)
 }
 
-plot_log_cpm_filter_norm_impact <- function(dge_list,
-                                            dge_list_filt,
-                                            dge_list_filt_norm,
-                                            log_cpm_filter_norm_out_path,
-                                            write_output) {
+plot_impact_of_filtering_and_normalizing <- 
+  function(
+    dge_list,
+    dge_list_filt,
+    dge_list_filt_norm,
+    filtering_and_normalizing_impact_out_path,
+    write_output
+  ) {
 	
 	log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
 	log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
 	log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
 	
 	plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
-	# plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
+	plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
 	plt_3 <- build_log_cpm_plot(log_cpm_filt_norm_long, "filtered, normalized")
 	
-	all_plts <- plot_grid(plt_1, plt_3, 
-						  labels = c('A', 'B'), 
+	all_plts <- plot_grid(plt_1, plt_2, plt_3, 
+						  labels = c('A', 'B', 'C'), 
 						  label_size = 12)
 	if (write_output){
 	  ggsave(file=log_cpm_filter_norm_out_path, all_plts)  
@@ -396,9 +399,20 @@ plot_log_cpm_filter_norm_impact <- function(dge_list,
 	}
 }
 
-get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
-                                                      ext_sample_metadata) {
-	## retrieves sample data from an external source for comparison purposes
+get_external_sample_data_and_study_design <- function(archs4_rnaseq_path) {
+	
+  # TODO if function in use regularly, expose this as an input
+  # three vectors of geo ids, cell population labels, and treatment labels,
+  # all of same length
+  ext_sample_metadata <- 
+    list(ext_sample_geos = 
+           c(),
+         ext_sample_population = 
+           c(),
+         ext_sample_treatment = 
+           c())
+  
+  ## retrieves sample data from an external source for comparison purposes
 	## returns 
 	ext_sample_geos <-
 		ext_sample_metadata$ext_sample_geos
@@ -407,18 +421,18 @@ get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
 	ext_sample_treatment <-
 		ext_sample_metadata$ext_sample_treatment
 	
-	# h5ls(mouse_archs4_rnaseq_path)
+	# h5ls(archs4_rnaseq_path)
 	
 	all_arch_sample_geos <-
-		h5read(mouse_archs4_rnaseq_path, name = "meta/samples/geo_accession")
+		h5read(archs4_rnaseq_path, name = "meta/samples/geo_accession")
 	
 	ext_idxs <- which(all_arch_sample_geos %in% ext_sample_geos)
 	stopifnot(length(ext_sample_geos) == length(ext_idxs))
 	
 	ext_sample_source_name <- 
-		h5read(mouse_archs4_rnaseq_path, "meta/samples/source_name_ch1")[ext_idxs]
+		h5read(archs4_rnaseq_path, "meta/samples/source_name_ch1")[ext_idxs]
 	ext_sample_labels <- 
-		h5read(mouse_archs4_rnaseq_path, name="meta/samples/title")[ext_idxs]
+		h5read(archs4_rnaseq_path, name="meta/samples/title")[ext_idxs]
 	ext_study_design <- data.frame(
 		population = ext_sample_population,
 		treatment = ext_sample_treatment,
@@ -426,11 +440,11 @@ get_external_sample_data_and_study_design <- function(mouse_archs4_rnaseq_path,
 		source_name = ext_sample_source_name
 	)
 	
-	gene_ids <- h5read(mouse_archs4_rnaseq_path, "meta/genes/gene_symbol")
+	gene_ids <- h5read(archs4_rnaseq_path, "meta/genes/gene_symbol")
 	
 	# get gene expressions, wide by sample, then transcribe and add col/rownames
 	# TODO determine if these are in cpm already
-	expression <- h5read(mouse_archs4_rnaseq_path, "data/expression", 
+	expression <- h5read(archs4_rnaseq_path, "data/expression", 
 						 index=list(ext_idxs, 1:length(gene_ids)))
 	expression <- t(expression)
 	rownames(expression) <- gene_ids
@@ -606,22 +620,24 @@ temp_isoform_analysis <- function(study_design, explanatory_variable,
 	
 }
 
-plot_and_return_mean_variance_gene_weights <- 
-  function(dge_list_filt_norm,
-           design_matrix,
-           mean_variance_plot_out_path,
-           write_output){
+get_mean_variance_weights <- function(dge_list_filt_norm,
+                                      design_matrix) {
   # voom requires the input to be counts, not CPM, TPM etc
-  # performs log2cpm of the counts then variance stabilizes them, 
-  # then estimates the mean-variance relationship and produces observation 
+  # performs log2cpm of the counts then variance stabilizes them,
+  # then estimates the mean-variance relationship and produces observation
   # level weights for linear modelling
   # object is an Expression List (EList)
-
-  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix, 
-                                # plot=TRUE,
-                                save.plot=TRUE,
-                                )
   
+  mean_variance_weights <- voom(dge_list_filt_norm, design_matrix,
+                                # plot=TRUE,
+                                save.plot = TRUE)
+  return(mean_variance_weights)
+}
+
+plot_mean_variance_distribution <- function(mean_variance_weights,
+                                            mean_variance_plot_out_path,
+                                            write_output){
+,  
   # points
   df = data.frame(x = mean_variance_weights$voom.xy$x,
                   y = mean_variance_weights$voom.xy$y)
@@ -776,6 +792,23 @@ plot_gene_cluster_heatmaps <-
       dev.off()}
   }
 
+get_dge_list_filt_norm <- function(gene_counts, 
+                                               sample_labels) {
+  
+  dge_list <-
+    build_digital_gene_expression_list(gene_counts, sample_labels)
+  
+  dge_list_filt <- filter_dge_list(dge_list,
+                                   min_cpm = 2,
+                                   min_samples_with_min_cpm = 5)
+  
+  # adjusts norm factors in dge list samples df, allows comparison across samples
+  dge_list_filt_norm <-
+    calcNormFactors(dge_list_filt, method = 'TMM')
+  
+  return(list(dge_list, dge_list_filt, dge_list_filt_norm))
+}
+
 #' # Input paths
 abundance_root_dir <- 
   '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
@@ -786,16 +819,16 @@ isoform_annotation_path <-
 fasta_reference_path <- 
   '/media/awmundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz'
 # external validation inputs
-mouse_archs4_rnaseq_path <- 
+archs4_rnaseq_path <- 
   '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
 
 #' # Output_paths
-log_cpm_filter_norm_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
+filtering_and_normalizing_impact_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
 pca_scatter_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
 pca_small_multiples_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
 pca_scatter_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter_ext.pdf"
 pca_small_multiples_ext_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
-cluster_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/cluster.pdf"
+sample_cluster_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/sample_cluster.pdf"
 dge_volcano_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
 dge_csv_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
 dge_datatable_out_path <- "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
@@ -824,22 +857,12 @@ control_label <- 'cx3_neg'
 experimental_label <- 'cx3_pos'
 # Must be FALSE if knitting to Rmarkdown
 write_output <- FALSE
+compare_to_external_data <- FALSE
 
-# TODO replace these with actual genes of interest
-ext_sample_metadata <- 
-  list(ext_sample_geos = 
-         c("GSM2310941", "GSM2310942", "GSM2310943", "GSM2310944", "GSM2310945",
-           "GSM2310946", "GSM2310947", "GSM2310948", "GSM2310949", "GSM2310950",
-           "GSM2310951", "GSM2310952"),
-       ext_sample_population = 
-         c("WT", "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8", "WT", 
-           "WT", "Ripk3", "Ripk3", "Ripk3Casp8", "Ripk3Casp8"),
-       ext_sample_treatment = 
-         c("unstim", "unstim", "unstim", "unstim", "unstim", "unstim",
-           "LPS", "LPS", "LPS", "LPS", "LPS", "LPS"))
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
+design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 sample_labels <- study_design$sample_label
 abundance_paths <- study_design$abundance_path
 
@@ -850,25 +873,29 @@ tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 c(gene_counts, gene_lengths, gene_abunds) %<-%
 	get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
 
-dge_list <- build_digital_gene_expression_list(gene_counts, sample_labels)
 
-dge_list_filt <- filter_dge_list(dge_list,
-                                 min_cpm = 2,
-                                 min_samples_with_min_cpm = 5)
+#' # Normalization, Filtering, Logging, Converting to Counts per Million
+c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
+  get_dge_list_filt_norm(gene_counts, sample_labels)
 
-# adjusts norm factors in dge list samples df, allows comparison across samples
-dge_list_filt_norm <- calcNormFactors(dge_list_filt, method = 'TMM')
-
-#' # Normalization and Filtering Impact on CPM Distributions
-# TODO remove this since it's not super useful
-plot_log_cpm_filter_norm_impact(dge_list, dge_list_filt, dge_list_filt_norm,
-                                log_cpm_filter_norm_out_path, write_output)
-
-#' # Sample Cluster Dendogram
-# TODO Consider this QC bc PCA is better from a clustering perspective
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
+
+#' # Build Mean/Variance Weights Across Samples for Each Gene 
+mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
+                                                   design_matrix)
+
+#' # QC
+plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
+                                         dge_list_filt_norm,
+                                         filtering_and_normalizing_impact_out_path, 
+                                         write_output)
+
 plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
-                              cluster_out_path, write_output)
+                              sample_cluster_out_path, write_output)
+
+plot_mean_variance_distribution(mean_variance_weights, 
+                                mean_variance_plot_out_path,
+                                write_output)
 
 #' # Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
@@ -878,22 +905,17 @@ plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
 
 #' # Compare to external sample
-external_data <-
-  get_external_sample_data_and_study_design(mouse_archs4_rnaseq_path,
-                                            ext_sample_metadata)
-plot_external_sample_pca(external_data, pca_scatter_ext_out_path,
-                         pca_small_multiples_ext_out_path,
-                         write_output)
-
-#' # Plot of the Count Mean/Variance Relationship Across Samples for Each Gene 
-design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
-# TODO mean variance plot should be a QC thing only
-mean_variance_weights <- 
-  plot_and_return_mean_variance_gene_weights(dge_list_filt_norm,
-                                             design_matrix,
-                                             mean_variance_plot_out_path,
-                                             write_output)
-
+if (compare_to_external_data) {
+  external_data <-
+    get_external_sample_data_and_study_design(archs4_rnaseq_path)
+  
+  plot_external_sample_pca(
+    external_data,
+    pca_scatter_ext_out_path,
+    pca_small_multiples_ext_out_path,
+    write_output
+  )
+}
 
 #' # Differential Gene Expression Volcano Plot
 bayes_stats <-
