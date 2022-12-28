@@ -637,7 +637,6 @@ get_mean_variance_weights <- function(dge_list_filt_norm,
 plot_mean_variance_distribution <- function(mean_variance_weights,
                                             mean_variance_plot_out_path,
                                             write_output){
-,  
   # points
   df = data.frame(x = mean_variance_weights$voom.xy$x,
                   y = mean_variance_weights$voom.xy$y)
