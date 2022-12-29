@@ -718,33 +718,40 @@ get_sig_dif_expressed_genes <- function(bayes_stats,
                                         significance_function,
                                         min_lfc,
                                         max_p_val
-                                        ) {
+) {
+  
   
   if (significance_function == 'decideTests') {
-    # using bayes_stats- the fitted model object (that includes the 
-    # contrast matrix)- get a gene-level table showing whether the gene was 
-    # significantly negative, sig positive, or not sig with respect to each 
+    stop('decideTests deg creation not fully implemented yet')
+    #TODO dge output needs logFC attached to it, which the decideTests output
+    # does not have
+    
+    # using bayes_stats- the fitted model object (that includes the
+    # contrast matrix)- get a gene-level table showing whether the gene was
+    # significantly negative, sig positive, or not sig with respect to each
     # coefficient in the contrast matrix
-    all_dge <- decideTests(bayes_stats, method = "global",
-                           adjust.method = multiple_testing_correction_method,
-                           p.value = max_p_val, 
-                           lfc = min_lfc)
-    all_dge <- as_tibble(all_dge, rownames = 'gene_id')
+    dge <- decideTests(
+      bayes_stats,
+      method = "global",
+      adjust.method = multiple_testing_correction_method,
+      p.value = max_p_val,
+      lfc = min_lfc
+    )
+    dge <- data.frame(dge)
+    dge <- as_tibble(dge, rownames = 'gene_id')
+    dge$gene_id <- gsub('"', "", dge$gene_id)
+    
   } else if (significance_function == 'topTable') {
-    all_dge <- get_topTable_dge(bayes_stats,
-                                multiple_testing_correction_method,
-                                min_lfc,
-                                max_p_val)
+    dge <- get_topTable_dge(bayes_stats,
+                            multiple_testing_correction_method,
+                            min_lfc,
+                            max_p_val)
   }
   else {
     stop('Invalid significance function')
   }
-  # subset to just the genes that were significantly differently expressed
-  # TODO use something other than mean variance weights$E object if that makes sense
-  # and pass it in here
-  # sig_dge_mtx <- mean_variance_weights$E[all_dge[,1] !=0,]
   
-  return(all_dge)
+  return(dge)
 }
 
 get_clusters <- function(cluster_type, sig_dge_mtx) {
@@ -967,7 +974,7 @@ sig_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        'topTable',
                                        min_lfc = 2,
                                        max_p_val = 0.05)
-all_dge <- get_sig_dif_expressed_genes(bayes_stats, 
+all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                          multiple_testing_correction_method,
                                          'topTable',
                                          min_lfc = 0,
