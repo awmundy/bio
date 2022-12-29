@@ -845,8 +845,7 @@ plot_gene_cluster_heatmaps <-
       dev.off()}
   }
 
-get_dge_list_filt_norm <- function(gene_counts, 
-                                               sample_labels) {
+get_dge_list_filt_norm <- function(gene_counts, sample_labels) {
   
   dge_list <-
     build_digital_gene_expression_list(gene_counts, sample_labels)
@@ -862,73 +861,78 @@ get_dge_list_filt_norm <- function(gene_counts,
   return(list(dge_list, dge_list_filt, dge_list_filt_norm))
 }
 
-#' # Input paths
-abundance_root_dir <- 
-  '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/'
-study_design_path <- 
-  '/media/awmundy/Windows/bio/ac_thymus/study_design/study_design_removed_bad_one.csv'
-isoform_annotation_path <- 
-  '/media/awmundy/Windows/bio/reference_genomes/mouse/gencode.vM31.chr_patch_hapl_scaff.annotation.gtf.gz'
-fasta_reference_path <- 
-  '/media/awmundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz'
-# external validation inputs
-archs4_rnaseq_path <- 
-  '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
+get_inputs_ac_thymus <- function() {
+  inputs =   list(
+    abundance_root_dir =
+      '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/',
+    study_design_path =
+      '/media/awmundy/Windows/bio/ac_thymus/study_design/study_design_removed_bad_one.csv'
+    # isoform_annotation_path =
+    # '/media/awmundy/Windows/bio/reference_genomes/mouse/gencode.vM31.chr_patch_hapl_scaff.annotation.gtf.gz',
+    # external_validation_fasta_reference_path =
+    # '/media/awmundy/Windows/bio/reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
+    # external_validation_archs4_rnaseq_path =
+    #   '/media/awmundy/Windows/bio/archs4_rnaseq/mouse_matrix_v10.h5'
+  )
+  return(inputs)
+}
 
-#' # Output_paths
-filtering_and_normalizing_impact_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/filter_norm_impact.pdf"
-pca_scatter_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter.pdf"
-pca_small_multiples_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples.pdf"
-pca_scatter_ext_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_scatter_ext.pdf"
-pca_small_multiples_ext_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/pca_small_multiples_ext.pdf"
-sample_cluster_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/sample_cluster.pdf"
-dge_volcano_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano.html"
-dge_volcano_sig_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_volcano_sig.html"
-dge_csv_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.csv"
-dge_datatable_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/dge_table.html"
-isoform_analysis_out_dir <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/isoform_analysis/"
-mean_variance_plot_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/mean_variance_trend.png"
-gene_cluster_heatmap_gene_scaling_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_gene_scaling.png"
-gene_cluster_heatmap_sample_scaling_out_path <- 
-  "/media/awmundy/Windows/bio/ac_thymus/outputs/gene_cluster_heatmap_sample_scaling.png"
+#' # Configuration
+sample_dimensions <- c('population', 'age')
+explanatory_variable <- c('age')
+control_label <- 'old'
+experimental_label <- 'young'
+# explanatory_variable <- c('population')
+# control_label <- 'cx3_neg'
+# experimental_label <- 'cx3_pos'
+multiple_testing_correction_method <- "BH"
 
+# Must be FALSE if knitting to Rmarkdown
+write_output <- FALSE
+compare_to_external_data <- FALSE
+
+c(abundance_root_dir, study_design_path) %<-% get_inputs_ac_thymus()
+
+output_dir <- '/media/awmundy/Windows/bio/ac_thymus/outputs/'
 # run in console (while this section is commented out, else: recursion) to 
 # render this document as an rmarkdown file (or html file)
 # library(rmarkdown)
-# rendered_file_out_path <- '/media/awmundy/Windows/bio/ac_thymus/outputs/analysis.html'
 # rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
-#                   output_file=rendered_file_out_path)
+#                   output_file=paste0(output_dir, 'ac_thymus_young_vs_adult_comparison.html'))
 
 # for storing/recording the libraries used in this project, 
 # for docker/reproducibility purposes
 # renv::init(project='/home/awmundy/code/bio/r_code/')
 
-
-#' # Configuration
-sample_dimensions <- c('population', 'age')
-# explanatory_variable <- c('age')
-# control_label <- 'old'
-# experimental_label <- 'young'
-explanatory_variable <- c('population')
-control_label <- 'cx3_neg'
-experimental_label <- 'cx3_pos'
-multiple_testing_correction_method <- "BH"
-# Must be FALSE if knitting to Rmarkdown
-write_output <- FALSE
-compare_to_external_data <- FALSE
+#' # Output Paths
+filtering_and_normalizing_impact_out_path <- 
+  paste0(output_dir, "filter_norm_impact.pdf")
+pca_scatter_out_path <- 
+  paste0(output_dir, "pca_scatter.pdf")
+pca_small_multiples_out_path <- 
+  paste0(output_dir, "pca_small_multiples.pdf")
+pca_scatter_ext_out_path <- 
+  paste0(output_dir, "pca_scatter_ext.pdf")
+pca_small_multiples_ext_out_path <- 
+  paste0(output_dir, "pca_small_multiples_ext.pdf")
+sample_cluster_out_path <- 
+  paste0(output_dir, "sample_cluster.pdf")
+dge_volcano_out_path <- 
+  paste0(output_dir, "dge_volcano.html")
+dge_volcano_sig_out_path <- 
+  paste0(output_dir, "dge_volcano_sig.html")
+dge_csv_out_path <- 
+  paste0(output_dir, "dge_table.csv")
+dge_datatable_out_path <- 
+  paste0(output_dir, "dge_table.html")
+isoform_analysis_out_dir <- 
+  paste0(output_dir, "isoform_analysis/")
+mean_variance_plot_out_path <- 
+  paste0(output_dir, "mean_variance_trend.png")
+gene_cluster_heatmap_gene_scaling_out_path <- 
+  paste0(output_dir, "gene_cluster_heatmap_gene_scaling.png")
+gene_cluster_heatmap_sample_scaling_out_path <- 
+  paste0(output_dir, "gene_cluster_heatmap_sample_scaling.png")
 
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
@@ -1021,7 +1025,7 @@ plot_mean_variance_distribution(mean_variance_weights,
 
 if (compare_to_external_data) {
   external_data <-
-    get_external_sample_data_and_study_design(archs4_rnaseq_path)
+    get_external_sample_data_and_study_design(external_validation_archs4_rnaseq_path)
   
   plot_external_sample_pca(
     external_data,
@@ -1034,6 +1038,6 @@ if (compare_to_external_data) {
 # # TODO not working yet
 # # temp_isoform_analysis(study_design, explanatory_variable,
 # # 					  abundance_paths, isoform_annotation_path,
-# # 					  fasta_reference_path,
+# # 					  external_validation_fasta_reference_path,
 # # 					  isoform_analysis_out_dir)
 # 
