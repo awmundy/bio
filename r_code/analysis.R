@@ -504,26 +504,6 @@ get_design_matrix <- function(study_design, has_intercept,
 	return(design_matrix)
 }
 
-build_volcano_plot <- function(dge_top_volcano_input,
-                               title) {
-  
-  vplot <- ggplot(dge_top_volcano_input) +
-    aes(y = adj.P.Val,
-        x = logFC,
-        text = paste("Symbol:", gene_id)) +
-    geom_point(size = 2) +
-    labs(title = title,
-         # subtitle = "Insert Subtitle",
-         caption = paste0("produced on ", Sys.time())) +
-    theme_bw()
-  
-  # write interactive plot
-  interactive_vplot <- plotly::ggplotly(vplot)
-  
-  return(interactive_vplot)
-}
-
-
 get_topTable_dge <- function(bayes_stats,
                              multiple_testing_correction_method,
                              min_lfc,
@@ -548,9 +528,18 @@ plot_dge_volcano <- function(dge,
                              dge_volcano_out_path,
                              write_output) {
   
-  vplot <- build_volcano_plot(dge, title)
-  # vplot_sig <- build_volcano_plot(dge_top_volcano_input_sig, 
-                                  # 'Signficantly Differentially Expressed Genes')
+  vplot <- ggplot(dge) +
+    aes(y = -log10(adj.P.Val),
+        x = logFC,
+        text = paste("Symbol:", gene_id)) +
+    geom_point(size = 2) +
+    labs(title = title,
+         # subtitle = "Insert Subtitle",
+         caption = paste0("produced on ", Sys.time())) +
+    theme_bw()
+  
+  # write interactive plot
+  vplot <- plotly::ggplotly(vplot)
   
 	if (write_output) {
 	  htmlwidgets::saveWidget(vplot, dge_volcano_out_path)
@@ -559,20 +548,25 @@ plot_dge_volcano <- function(dge,
 	  }
 }
 
-plot_dge_datatable_and_write_csv <- function(sig_dge_tbl,
+plot_dge_datatable_and_write_csv <- function(sig_dge,
                                              dge_csv_out_path,
                                              dge_datatable_out_path, 
                                              write_output) {
   
-	write_csv(sig_dge_tbl, file=dge_csv_out_path)
+  sig_dge <- select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
+  
+	write_csv(sig_dge, file=dge_csv_out_path)
 	
 	# build and write datatable for a pretty output
-	dtable <- datatable(sig_dge_tbl, 
+	dtable <- datatable(sig_dge, 
 						extensions = c('KeyTable', "FixedHeader"), 
 						caption = 'Differentially Expressed Genes',
 						rownames = FALSE,
+						selection = 'multiple',
+						filter = 'top',
 						options = list(keys = TRUE, searchHighlight = TRUE,
-						               pageLength = 10,
+						               pageLength = 10, orderMulti = TRUE,
+						               scrollX='400px',
 						               lengthMenu = c("10", "25", "50", "100")))
 	round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
 	dtable <- formatRound(dtable, columns=round_cols, digits=2)
@@ -675,7 +669,8 @@ plot_mean_variance_distribution <- function(mean_variance_weights,
   interactive_plot <- plotly::layout(interactive_plot, 
                                      title='Gene Mean vs Variance Across Samples',
                                      xaxis=list(title='log2 count + 0.5'),
-                                     yaxis=list(title="Sqrt(standard deviation)"))
+                                     yaxis=list(title="Sqrt(standard deviation)"),
+                                     margin=list(l=50, r=50, b=100, t=100))
   
   if (write_output) {
     htmlwidgets::saveWidget(interactive_plot, mean_variance_plot_out_path)
@@ -822,9 +817,12 @@ plot_gene_cluster_heatmaps <-
                 Colv = as.dendrogram(sample_clust),
                 RowSideColors = gene_clust_colors,
                 col = heat_colors, scale = 'row',
+                srtCol = 45,
                 density.info = 'none', trace = 'none',
-                cexRow = 1, cexCol = 1, margins = c(5, 5),
-                main='Gene Cluster Heatmap (gene scaling)')
+                cexRow = 1, cexCol = 1, margins = c(8, 8),
+                main=paste('Gene Cluster Heatmap (gene scaling)', 
+                           'for up to 10 highest/lowest LFC genes', 
+                           sep= "\n"))
     if (write_output) {
       png(gene_cluster_heatmap_gene_scaling_out_path)
       dev.off()}
@@ -837,9 +835,12 @@ plot_gene_cluster_heatmaps <-
                 Colv = as.dendrogram(sample_clust),
                 RowSideColors = gene_clust_colors,
                 col = heat_colors, scale = 'none',
+                srtCol = 45,
                 density.info = 'none', trace = 'none',
-                cexRow = 1, cexCol = 1, margins = c(5, 5),
-                main='Gene Cluster Heatmap (sample scaling)')
+                cexRow = 1, cexCol = 1, margins = c(8, 8),
+                main=paste('Gene Cluster Heatmap (sample scaling)', 
+                           'for up to 10 highest/lowest LFC genes', 
+                           sep= "\n"))
     if (write_output) {
       png(gene_cluster_heatmap_sample_scaling_out_path)
       dev.off()}
@@ -879,30 +880,38 @@ get_inputs_ac_thymus <- function() {
 
 #' # Configuration
 sample_dimensions <- c('population', 'age')
+# explanatory_variable <- c('age')
 explanatory_variable <- c('age')
-control_label <- 'old'
-experimental_label <- 'young'
-# explanatory_variable <- c('population')
-# control_label <- 'cx3_neg'
-# experimental_label <- 'cx3_pos'
-multiple_testing_correction_method <- "BH"
+if (explanatory_variable == 'age') {
+  output_name <- 'ac_thymus_young_vs_adult_comparison.html'
+  control_label <- 'old'
+  experimental_label <- 'young'
+} else if (explanatory_variable == 'population') {
+  control_label <- 'cx3_neg'
+  experimental_label <- 'cx3_pos'
+  output_name <- 'ac_thymus_population_comparison.html'  
+} else{
+  stop('Invalid explanatory variable')
+}
 
+multiple_testing_correction_method <- "BH"
 # Must be FALSE if knitting to Rmarkdown
 write_output <- FALSE
 compare_to_external_data <- FALSE
 
-c(abundance_root_dir, study_design_path) %<-% get_inputs_ac_thymus()
-
 output_dir <- '/media/awmundy/Windows/bio/ac_thymus/outputs/'
+
 # run in console (while this section is commented out, else: recursion) to 
 # render this document as an rmarkdown file (or html file)
 # library(rmarkdown)
 # rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
-#                   output_file=paste0(output_dir, 'ac_thymus_young_vs_adult_comparison.html'))
+#                   output_file=paste0(output_dir, output_name))
 
 # for storing/recording the libraries used in this project, 
 # for docker/reproducibility purposes
 # renv::init(project='/home/awmundy/code/bio/r_code/')
+
+c(abundance_root_dir, study_design_path) %<-% get_inputs_ac_thymus()
 
 #' # Output Paths
 filtering_and_normalizing_impact_out_path <- 
@@ -976,7 +985,7 @@ bayes_stats <-
 sig_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        multiple_testing_correction_method,
                                        'topTable',
-                                       min_lfc = 2,
+                                       min_lfc = 0,
                                        max_p_val = 0.05)
 all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                          multiple_testing_correction_method,
