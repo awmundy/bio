@@ -550,7 +550,7 @@ plot_dge_volcano <- function(dge,
 
 plot_dge_datatable_and_write_csv <- function(sig_dge,
                                              dge_csv_out_path,
-                                             dge_datatable_out_path, 
+                                             gsea_datatable_out_path, 
                                              write_output) {
   
   sig_dge <- select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
@@ -572,7 +572,7 @@ plot_dge_datatable_and_write_csv <- function(sig_dge,
 	dtable <- formatRound(dtable, columns=round_cols, digits=2)
 	
 	if (write_output) {
-	  htmlwidgets::saveWidget(dtable, dge_datatable_out_path)
+	  htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
 	} else {
 	  dtable
 	}
@@ -862,6 +862,157 @@ get_dge_list_filt_norm <- function(gene_counts, sample_labels) {
   return(list(dge_list, dge_list_filt, dge_list_filt_norm))
 }
 
+get_msig_gene_sets <- function(msig_hallmarks, species) {
+  # load the gene ontology sets, and filter to the ones that are a part of 
+  # the hallmarks we care about
+  msig_gene_sets <- msigdbr(species=species, category='H') # H for hallmarks
+  msig_gene_sets <- dplyr::filter(msig_gene_sets, gs_name %in% msig_hallmarks)
+  msig_gene_sets <- dplyr::select(msig_gene_sets, gs_name, gene_symbol)
+  
+  return(msig_gene_sets)
+}
+
+plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path, write_output) {
+  # Builds and writes an interactive plot showing functional 
+  # enrichment by various categories. A gene set is considered functionally 
+  # enriched if it statstically (p-value) significantly enriched compared to 
+  # all other genes
+  # sig_dge: dataframe of differentially expressed genes
+  
+  unique_genes <- unique(sig_dge$gene_id)
+  
+  # TODO determine what correction method is typically used and use that
+  # default args return significantly enriched gene sets at a 0.05 threshold
+  gost_res <- gost(unique_genes,
+                   organism = organism,
+                   correction_method = "fdr")
+  
+  out_plot <- gostplot(gost_res, interactive = T, capped = T) 
+  
+  if (write_output) {
+    htmlwidgets::saveWidget(out_plot, out_path)  
+  } else {
+    out_plot
+  }
+}
+
+get_msig_hallmark_labels_of_interest <- function() {
+
+  msig_hallmarks <- c(
+  	'HALLMARK_TNFA_SIGNALING_VIA_NFKB',
+  	'HALLMARK_ALLOGRAFT_REJECTION',
+  	'HALLMARK_COAGULATION',
+  	'HALLMARK_INFLAMMATORY_RESPONSE',
+  	'HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION',
+  	'HALLMARK_P53_PATHWAY',
+  	'HALLMARK_IL6_JAK_STAT3_SIGNALING',
+  	'HALLMARK_KRAS_SIGNALING_UP',
+  	'HALLMARK_INTERFERON_GAMMA_RESPONSE',
+  	'HALLMARK_APOPTOSIS',
+  	'HALLMARK_COMPLEMENT',
+  	'HALLMARK_KRAS_SIGNALING_DN',
+  	'HALLMARK_ANGIOGENESIS',
+  	'HALLMARK_XENOBIOTIC_METABOLISM',
+  	'HALLMARK_APICAL_SURFACE',
+  	'HALLMARK_APICAL_JUNCTION',
+  	'HALLMARK_HYPOXIA',
+  	'HALLMARK_TGF_BETA_SIGNALING',
+  	'HALLMARK_UV_RESPONSE_UP',
+  	'HALLMARK_MYOGENESIS',
+  	'HALLMARK_E2F_TARGETS',
+  	'HALLMARK_G2M_CHECKPOINT',
+  	'HALLMARK_MITOTIC_SPINDLE',
+  	'HALLMARK_MYC_TARGETS_V1',
+  	'HALLMARK_SPERMATOGENESIS',
+  	'HALLMARK_ANDROGEN_RESPONSE',
+  	'HALLMARK_MTORC1_SIGNALING',
+  	'HALLMARK_INFLAMMATORY_RESPONSE',
+  	'HALLMARK_P53_PATHWAY'
+  )
+  return(msig_hallmarks)
+}
+
+get_gsea_input <- function(sig_dge) {
+  # builds a sorted differentially expressed gene input for gsea analysis
+  
+  # drop dupes bc gsea function doesn't handle them consistently
+  no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE)
+  
+  # build sorted list
+  gsea_input <- no_dupes_sig_dge$logFC
+  names(gsea_input) <- as.character(no_dupes_sig_dge$gene_id)
+  gsea_input <- sort(gsea_input, decreasing = TRUE)
+  
+  return(gsea_input)
+}
+
+get_gsea_res <- function(gsea_input, gene_sets) {
+  # competitive GSEA with gene level permutations
+  gsea_res <- GSEA(gsea_input, TERM2GENE=gene_sets)
+  
+  return(gsea_res)  
+}
+
+plot_gsea_bubble <- function(gsea_df, write_output, gsea_bubble_plot_path) {
+  # bubble plot
+  # - bubble size: number of genes in the gene set
+  # - color: enrichment score
+  # - transparency: -log10 adjusted p value
+  bubble_plot_df <- mutate(gsea_df,
+                           phenotype = case_when(NES > 0 ~ "intervention",
+                                                 NES < 0 ~ "control"))
+  plt <- ggplot(bubble_plot_df, aes(x=phenotype, y=ID)) +
+    geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
+    scale_color_gradient(low="blue", high="red") +
+    theme_bw()
+
+  if (write_output) {
+    pdf(gsea_bubble_plot_path)
+    plt
+    dev.off()
+  } else {
+    plt
+  }
+}
+
+plot_gsea_line <- function(gsea_res, gsea_df, write_output, 
+                           gsea_line_plot_path) {
+  
+  plt <- gseaplot2(gsea_res, geneSetID = gsea_df$ID,
+            title = gsea_df$Description)
+  
+  if (write_output) {
+    pdf(gsea_line_plot_path)
+    plt
+    dev.off()
+  } else {
+    plt
+  }
+}
+
+plot_gsea_datatable <- function(gsea_df, write_output, 
+                                gsea_datatable_out_path) {
+  dtable <- datatable(gsea_df, 
+                      extensions = c('KeyTable', "FixedHeader"), 
+                      caption = 'Differentially Expressed Genes',
+                      rownames = FALSE,
+                      selection = 'multiple',
+                      filter = 'top',
+                      options = list(keys = TRUE, searchHighlight = TRUE,
+                                     pageLength = 10, orderMulti = TRUE,
+                                     scrollX='400px',
+                                     lengthMenu = c("10", "25", "50", "100")))
+  # round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
+  # dtable <- formatRound(dtable, columns=round_cols, digits=2)
+  
+  if (write_output) {
+    htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
+  } else {
+    dtable
+  }
+}
+
+
 # import configuration information
 source('~/code/bio/r_code/config.R')
 
@@ -884,7 +1035,7 @@ dge_volcano_sig_out_path <-
   paste0(output_dir, "dge_volcano_sig.html")
 dge_csv_out_path <- 
   paste0(output_dir, "dge_table.csv")
-dge_datatable_out_path <- 
+gsea_datatable_out_path <- 
   paste0(output_dir, "dge_table.html")
 isoform_analysis_out_dir <- 
   paste0(output_dir, "isoform_analysis/")
@@ -894,6 +1045,16 @@ gene_cluster_heatmap_gene_scaling_out_path <-
   paste0(output_dir, "gene_cluster_heatmap_gene_scaling.png")
 gene_cluster_heatmap_sample_scaling_out_path <- 
   paste0(output_dir, "gene_cluster_heatmap_sample_scaling.png")
+gost_plot_up_path <- 
+  paste0(output_dir, 'gene_ontology_plot_up.html')
+gost_plot_down_path <- 
+  paste0(output_dir, 'gene_ontology_plot_down.html')
+gsea_table_path <- 
+  paste0(output_dir, 'gsea_table.xlsx')
+gsea_line_plot_path <- 
+  paste0(output_dir, 'gsea_line_plot.pdf')
+gsea_bubble_plot_path <- 
+  paste0(output_dir, 'gsea_bubble_plot.pdf')
 
 study_design <- get_study_design_df(study_design_path)
 abundance_paths <- get_abundance_paths(abundance_root_dir)
@@ -955,6 +1116,29 @@ plot_dge_volcano(all_dge,
                  dge_volcano_out_path, 
                  write_output)
 
+#' # Functional Enrichment Analysis
+
+# split out into upregulated and downregulated sets
+sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
+sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
+plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus', 
+                              gost_plot_up_path, write_output)
+plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus', 
+                              gost_plot_down_path, write_output)
+
+# get and write gsea analysis output
+msig_hallmarks <- get_msig_hallmark_labels_of_interest()
+gene_sets <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+
+gsea_input <- get_gsea_input(sig_dge)
+gsea_res <- get_gsea_res(gsea_input, gene_sets)
+gsea_df <- as_tibble(gsea_res@result)
+
+plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+plot_gsea_line(gsea_res, gsea_df, write_output, gsea_line_plot_path)
+plot_gsea_bubble(gsea_df, write_output, gsea_bubble_plot_path)
+  
+
 #' # Differential Gene Expression Table
 # merge gene level df with sample cols with gene level df with significance info
 sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
@@ -962,7 +1146,7 @@ sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
 stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
 
 plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
-                                 dge_datatable_out_path, write_output)
+                                 gsea_datatable_out_path, write_output)
 
 #' # Gene/Sample Cluster Heatmaps
 plot_gene_cluster_heatmaps(sig_dge, 

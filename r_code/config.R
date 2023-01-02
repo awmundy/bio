@@ -15,9 +15,11 @@ get_inputs_ac_thymus <- function() {
   return(inputs)
 }
 
-sample_dimensions <- c('population', 'age')
+
 # explanatory_variable <- c('age')
-explanatory_variable <- c('age')
+explanatory_variable <- c('population')
+
+sample_dimensions <- c('population', 'age')
 if (explanatory_variable == 'age') {
   output_name <- 'ac_thymus_young_vs_adult_comparison.html'
   control_label <- 'old'
