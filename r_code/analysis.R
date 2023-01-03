@@ -142,7 +142,7 @@ filter_dge_list <- function(dge_list, min_cpm, min_samples_with_min_cpm) {
   return(dge_list)
 }
 
-get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_df) {
+get_gene_counts <- function(abundance_paths, sample_labels, tx_to_gene_df) {
 	# params:
 	# abundance_paths: c vector of paths of abundance files
 	# tx_to_gene_df: df mapping a transcript identifier to a gene name
@@ -880,7 +880,7 @@ plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path, write_out
   # Builds and writes an interactive plot showing functional 
   # enrichment by various categories. A gene set is considered functionally 
   # enriched if it statstically (p-value) significantly enriched compared to 
-  # all other genes
+  # all other genes. Uses Gene Ontology mappings (http://geneontology.org/)
   # sig_dge: dataframe of differentially expressed genes
   
   unique_genes <- unique(sig_dge$gene_id)
@@ -1071,8 +1071,7 @@ abundance_paths <- study_design$abundance_path
 #' # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
-gene_counts <- 
-  get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
+gene_counts <- get_gene_counts(abundance_paths, sample_labels, tx_to_gene_df)
 
 
 #' # Normalization, Filtering, Logging, Converting to Counts per Million
