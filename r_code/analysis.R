@@ -37,6 +37,10 @@ suppressPackageStartupMessages({
   library(rmarkdown)
   library(ggplot2)
   library(renv)
+  library(gprofiler2)
+  library(msigdbr)
+  library(clusterProfiler)
+  library(enrichplot)
 }) 
 
 #' # Functions
@@ -81,7 +85,7 @@ convert_tx_gene_mtx_to_tibble <- function(mtx, sample_labels) {
 build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
   # @return A list containing a matrix of counts (same as what was passed in) 
   #         and a dataframe of samples containing the total count and a 
-  #         normalization factor of 1
+  #         placeholder normalization factor of 1
   
   # subset to sample labels cols only, and convert to matrix
   dge_list <- DGEList(as.matrix(gene_counts[, sample_labels]))
@@ -160,12 +164,12 @@ get_gene_level_stats_dfs <- function(abundance_paths, sample_labels, tx_to_gene_
   # add column headers and convert to tibble
   gene_counts <- convert_tx_gene_mtx_to_tibble(gene_stats_list$counts, 
                                                sample_labels)
-  gene_lengths <- convert_tx_gene_mtx_to_tibble(gene_stats_list$length, 
-                                               sample_labels)
-  gene_abunds <- convert_tx_gene_mtx_to_tibble(gene_stats_list$abundance, 
-                                               sample_labels)
+  # gene_lengths <- convert_tx_gene_mtx_to_tibble(gene_stats_list$length, 
+  #                                              sample_labels)
+  # gene_abunds <- convert_tx_gene_mtx_to_tibble(gene_stats_list$abundance, 
+  #                                              sample_labels)
   
-  return(list(gene_counts, gene_lengths, gene_abunds))
+  return(gene_counts)
 }
 
 assign_abundance_paths_to_study_design <- function(study_design,
@@ -1067,8 +1071,8 @@ abundance_paths <- study_design$abundance_path
 #' # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
-c(gene_counts, gene_lengths, gene_abunds) %<-%
-	get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
+gene_counts <- 
+  get_gene_level_stats_dfs(abundance_paths, sample_labels, tx_to_gene_df)
 
 
 #' # Normalization, Filtering, Logging, Converting to Counts per Million
@@ -1077,16 +1081,16 @@ c(dge_list, dge_list_filt, dge_list_filt_norm) %<-%
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 
-#' # Build Mean/Variance Weights Across Samples for Each Gene 
-mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
-                                                   design_matrix)
-
 #' # Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
+
+#' # Build Mean/Variance Weights Across Samples for Each Gene 
+mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
+                                                   design_matrix)
 
 #' # Build Differential Gene Expression Dataframe
 bayes_stats <-
