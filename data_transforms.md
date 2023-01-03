@@ -221,10 +221,13 @@ Purpose:
 - Documentation:
   - https://sci-hub.se/https://www.nature.com/articles/s41596-018-0103-9
 - Externally cosntructed gene sets can be used, these can be curated by experts
-- g:Profiler is a functional enrichment analysis tool 
+- g:Profiler (gost) functional enrichment
+  - Uses Gene Ontology mappings from http://geneontology.org/
   - It takes just a list of genes and determines whether those genes represent relevant clusters of genes,
     as opposed to just being a random set of genes
   - In this analysis an R library is used to interface with g:Profiler
+- clusterProfiler (GSEA) functional enrichment
+  - Uses gene sets passed in by user
 - GSEABase is an R libray that helps perform functional enrichment analysis as well
   - Requires a sorted list of genes (by e.g. log fold change)
   - Gene expression is compared across two classes (e.g. experimental and control) and the genes are 
