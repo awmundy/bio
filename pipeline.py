@@ -80,6 +80,9 @@ def prep_fastq_files(cfg, run_type):
     elif run_type == 'diyt':
         prep_fastq_files_diyt(rna_txs_dir, fastq_folders_dir)
 
+    elif run_type == 'senescence_skeletal_muscle_myofiber':
+        prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_folders_dir)
+
     else:
         raise Exception('Invalid run_type')
 
@@ -104,13 +107,12 @@ def fastqc(rna_txs_dir, threads):
     fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
     fastq_paths = get_fastq_fpaths(fastq_folders_dir)
 
-    # dont overwrite if they already exist
     fastq_paths_where_fastqc_is_needed = []
     for fastq_path in fastq_paths:
         fastq_dir = os.path.dirname(fastq_path) + '/'
         fastq_file_name = os.path.basename(fastq_path)
         fastqc_html_file_name = fastq_file_name.replace('.fastq.gz', '_fastqc.html')
-        # don't overwrite
+        # dont overwrite if they already exist
         if not os.path.exists(fastq_dir + fastqc_html_file_name):
             fastq_paths_where_fastqc_is_needed += [fastq_path]
 
@@ -282,6 +284,39 @@ def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
             assert os.path.getsize(combined_fpath) > 0
             print(f'done combining files {fpath_1} {fpath_2}')
 
+def prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_folders_dir):
+
+    fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
+    if len(fpaths) == 0:
+        print('All fastq files already moved to their own subdir in', fastq_folders_dir)
+        return
+
+    # mapping of filename (sra id) to sample type
+    sample_map = {
+        'SRR15931118': 'young_1',
+        'SRR15931119': 'young_2',
+        'SRR15931120': 'young_3',
+        'SRR15931121': 'young_4',
+        'SRR15931122': 'old_1',
+        'SRR15931123': 'old_2',
+        'SRR15931124': 'old_3',
+        'SRR15931125': 'old_4',
+        'SRR15931126': 'old_senolytics_1',
+        'SRR15931127': 'old_senolytics_2',
+        'SRR15931128': 'old_senolytics_3',
+        'SRR15931129': 'old_senolytics_4',
+        }
+
+    for sra_id, sample_label in sample_map.items():
+        os.makedirs(f'{fastq_folders_dir}{sample_label}/')
+
+        # rename and move files to new directory
+        os.rename(f'{rna_txs_dir}{sra_id}_pass_1.fastq.gz',
+                  f'{fastq_folders_dir}/{sample_label}/{sample_label}_r1.fastq.gz')
+        os.rename(f'{rna_txs_dir}{sra_id}_pass_2.fastq.gz',
+                  f'{fastq_folders_dir}/{sample_label}/{sample_label}_r2.fastq.gz')
+
+
 
 ## Flow ##
 # <Download fasta file> -> fasta file -> <kallisto> -> index
@@ -304,24 +339,19 @@ cfgs = \
          'ref_genome': f'{project_dir}reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
          'raw_rna_txs_dir': f'{project_dir}ac_thymus/raw_rna_txs/',
          'rna_txs_dir': f'{project_dir}ac_thymus/rna_txs/',
-          # todo figure out these (and other) params for the thymus data
+         'seq_params': {'read_end_type': '--double'}},
+    'senescence_skeletal_muscle_myofiber':
+        {'ref_genome': f'{project_dir}reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
+         'rna_txs_dir': f'{project_dir}senescence_skeletal_muscle_myofiber/rna_txs/',
          'seq_params': {'read_end_type': '--double'}}
         }
 
-run_type = 'ac_thymus'
+run_type = 'senescence_skeletal_muscle_myofiber'
 cfg = cfgs[run_type]
-threads = 10
+threads = 6
 
 index_fpath = kallisto_build_index(cfg['ref_genome'])
 prep_fastq_files(cfg, run_type)
 fastqc(cfg['rna_txs_dir'], threads)
 kallisto_quant(index_fpath, cfg['rna_txs_dir'], threads, cfg['seq_params'])
 multiqc(cfg['rna_txs_dir'])
-
-# Thy_Y_CX3pos3_IGO_11991_B_5_S37_R1_001.fastq.gz
-#   - not in gzip format
-#   - kallisto quant fails to pseudoalign
-# Thy_Y_CX3pos3_IGO_11991_B_5_S37_R2_001.fastq.gz
-#   - 45% of way through fastqc: uk.ac.babraham.FastQC.Sequence.SequenceFormatException: Midline
-#     <seq string> didn't start with '+'
-#   - causes kallisto quant to hang?
