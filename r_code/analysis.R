@@ -948,7 +948,7 @@ get_gsea_input <- function(sig_dge) {
   # drop dupes bc gsea function doesn't handle them consistently
   no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE)
   
-  # build sorted list
+  # build sorted list since the GSEA function needs it that way
   gsea_input <- no_dupes_sig_dge$logFC
   names(gsea_input) <- as.character(no_dupes_sig_dge$gene_id)
   gsea_input <- sort(gsea_input, decreasing = TRUE)
@@ -1073,6 +1073,9 @@ study_design <- assign_abundance_paths_to_study_design(study_design, abundance_p
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 abundance_paths <- study_design$abundance_path
 
+# TODO try getting GO gene sets and feeding them to GSEA
+# TODO look into why GSEA isn't returning anything significant
+# TODO spot check more of the DGE
 
 #' # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
