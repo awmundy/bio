@@ -569,7 +569,7 @@ plot_dge_datatable_and_write_csv <- function(sig_dge,
 	# build and write datatable for a pretty output
 	dtable <- datatable(sig_dge, 
 						extensions = c('KeyTable', "FixedHeader"), 
-						caption = 'Differentially Expressed Genes',
+						caption = 'Significantly Differentially Expressed Genes',
 						rownames = FALSE,
 						selection = 'multiple',
 						filter = 'top',
@@ -1124,6 +1124,15 @@ plot_dge_volcano(all_dge,
                  dge_volcano_out_path, 
                  write_output)
 
+#' # Differential Gene Expression Table
+# merge gene level df with sample cols with gene level df with significance info
+sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
+# throw error if any row of sig_dge failed to find a merge
+stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
+
+plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
+                                 gsea_datatable_out_path, write_output)
+
 #' # Functional Enrichment Analysis
 
 # split out into upregulated and downregulated sets
@@ -1143,18 +1152,10 @@ gsea_res <- get_gsea_res(gsea_input, gene_sets)
 gsea_df <- as_tibble(gsea_res@result)
 
 plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
-plot_gsea_line(gsea_res, gsea_df, write_output, gsea_line_plot_path)
-plot_gsea_bubble(gsea_df, write_output, gsea_bubble_plot_path)
-  
-
-#' # Differential Gene Expression Table
-# merge gene level df with sample cols with gene level df with significance info
-sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
-# throw error if any row of sig_dge failed to find a merge
-stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
-
-plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
-                                 gsea_datatable_out_path, write_output)
+if (nrow(gsea_df) > 0) {
+  plot_gsea_line(gsea_res, gsea_df, write_output, gsea_line_plot_path)
+  plot_gsea_bubble(gsea_df, write_output, gsea_bubble_plot_path)
+}
 
 #' # Gene/Sample Cluster Heatmaps
 plot_gene_cluster_heatmaps(sig_dge, 
