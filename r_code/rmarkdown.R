@@ -2,13 +2,15 @@ suppressPackageStartupMessages(
   library(rmarkdown)
   )
 
-# import configuration details tp get output_dir and output_name
+# import configuration details to get output_dir and output_name/title
 source('~/code/bio/r_code/config.R')
+title_arg = paste0("--metadata=title:", output_title)
 
 # render the r script as an rmarkdown file (or html file)
 output_file = paste0(output_dir, output_name)
 rmarkdown::render('/home/awmundy/code/bio/r_code/analysis.R',
-                  output_file=output_file)
+                  output_file=output_file,
+                  output_options = list(pandoc_args = c(title_arg)))
 
 browseURL(output_file)
 

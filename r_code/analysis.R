@@ -1,5 +1,4 @@
 #' ---
-#' title: Thymus Analysis 
 #' date: "<center> _`r Sys.Date()`_ <center>"
 #' output:
 #'   html_document:
