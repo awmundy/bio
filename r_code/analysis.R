@@ -44,14 +44,19 @@ suppressPackageStartupMessages({
 }) 
 
 #' # Functions
-get_abundance_paths <- function(abundance_root_dir) {
+get_abundance_paths <- function(abundance_root_dir, sample_labels) {
+  
   abundance_dirs <- list.dirs(abundance_root_dir)[-1]
   
   abundance_paths <- c()
-  for(i in 1:length(abundance_dirs))
-    abundance_paths[i] <- paste(normalizePath(abundance_dirs[i]), 
-                                '/abundance.tsv', 
-                                sep='')
+  for (abundance_dir in abundance_dirs)
+    # retrieve only the abundance paths corresponding to the sample labels
+    if (basename(abundance_dir) %in% sample_labels) {
+      abundance_path <- paste(normalizePath(abundance_dir),
+                              '/abundance.tsv',
+                              sep = '')
+      abundance_paths <- c(abundance_paths, abundance_path)
+    }
   
   stopifnot(all(file.exists(abundance_paths)))
   return(abundance_paths)
@@ -1016,11 +1021,10 @@ plot_gsea_datatable <- function(gsea_df, write_output,
   }
 }
 
-
 # import configuration information
 source('~/code/bio/r_code/config.R')
 
-#' # Output Paths
+# Output Paths (only used if not knitting to rmarkdown)
 filtering_and_normalizing_impact_out_path <- 
   paste0(output_dir, "filter_norm_impact.pdf")
 pca_scatter_out_path <- 
@@ -1060,11 +1064,12 @@ gsea_line_plot_path <-
 gsea_bubble_plot_path <- 
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
+#' # Build study design and design matrix
 study_design <- get_study_design_df(study_design_path)
-abundance_paths <- get_abundance_paths(abundance_root_dir)
+sample_labels <- study_design$sample_label
+abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
-sample_labels <- study_design$sample_label
 abundance_paths <- study_design$abundance_path
 
 
