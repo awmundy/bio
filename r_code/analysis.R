@@ -1022,6 +1022,23 @@ plot_gsea_datatable <- function(gsea_df, write_output,
   }
 }
 
+get_go_gene_sets <- function(ont) {
+  # ont is GO category (ontology)
+  gene_set_list <- getGO(org='mouse', ont=ont)
+  
+  # merge human readable gene set name onto gene set df
+  gene_sets <- merge(gene_set_list$geneset, gene_set_list$geneset_name,
+                     by=1, all.x = TRUE)
+  
+  # cleanup
+  gene_sets <- dplyr::rename(gene_sets, gs_name=Term, gene_symbol=gene)
+  gene_sets <- dplyr::select(gene_sets, 'gs_name', 'gene_symbol')
+  gene_sets <- as_tibble(gene_sets)
+  gene_sets <- drop_na(gene_sets)
+  
+  return(gene_sets)
+}
+
 # import configuration information
 source('~/code/bio/r_code/config.R')
 
@@ -1072,10 +1089,6 @@ abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 abundance_paths <- study_design$abundance_path
-
-# TODO try getting GO gene sets and feeding them to GSEA
-# TODO look into why GSEA isn't returning anything significant
-# TODO spot check more of the DGE
 
 #' # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -1142,19 +1155,23 @@ plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
-plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus', 
+plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
                               gost_plot_up_path, write_output,
                               'Significantly Upregulated Pathways')
-plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus', 
+plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
 # get and write gsea analysis output
 msig_hallmarks <- get_msig_hallmark_labels_of_interest()
-gene_sets <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+gene_sets_msig <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+
+# TODO consider running GSEA on specific gene sets within this one
+#   (cant run it on all bc GSEA needs some genes excluded?)
+# go_gene_sets_bp <- get_go_gene_sets('bp')
 
 gsea_input <- get_gsea_input(sig_dge)
-gsea_res <- get_gsea_res(gsea_input, gene_sets)
+gsea_res <- get_gsea_res(gsea_input, gene_sets_msig)
 gsea_df <- as_tibble(gsea_res@result)
 
 plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
