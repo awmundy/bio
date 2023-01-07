@@ -881,7 +881,8 @@ get_msig_gene_sets <- function(msig_hallmarks, species) {
   return(msig_gene_sets)
 }
 
-plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path, write_output) {
+plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path, 
+                                          write_output, title) {
   # Builds and writes an interactive plot showing functional 
   # enrichment by various categories. A gene set is considered functionally 
   # enriched if it statstically (p-value) significantly enriched compared to 
@@ -896,7 +897,8 @@ plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path, write_out
                    organism = organism,
                    correction_method = "fdr")
   
-  out_plot <- gostplot(gost_res, interactive = T, capped = T) 
+  out_plot <- gostplot(gost_res, interactive = T, capped = T)
+  out_plot <- layout(out_plot, title=title)
   
   if (write_output) {
     htmlwidgets::saveWidget(out_plot, out_path)  
@@ -1109,10 +1111,10 @@ sig_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        min_lfc = 0,
                                        max_p_val = 0.05)
 all_dge <- get_sig_dif_expressed_genes(bayes_stats,
-                                         multiple_testing_correction_method,
-                                         'topTable',
-                                         min_lfc = 0,
-                                         max_p_val = 1.0)
+                                       multiple_testing_correction_method,
+                                       'topTable',
+                                       min_lfc = 0,
+                                       max_p_val = 1.0)
 
 #' # Differential Gene Expression Volcano Plots
 plot_dge_volcano(sig_dge, 
@@ -1139,9 +1141,11 @@ plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
 plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus', 
-                              gost_plot_up_path, write_output)
+                              gost_plot_up_path, write_output,
+                              'Significantly Upregulated Pathways')
 plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus', 
-                              gost_plot_down_path, write_output)
+                              gost_plot_down_path, write_output,
+                              'Significantly Downregulated Pathways')
 
 # get and write gsea analysis output
 msig_hallmarks <- get_msig_hallmark_labels_of_interest()
