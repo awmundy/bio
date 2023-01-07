@@ -33,7 +33,6 @@ cfgs <-
          list(
            abundance_root_dir =
              '/media/awmundy/Windows/bio/senescence_skeletal_muscle_myofiber/rna_txs/fastq_folders/',
-           output_dir = '/media/awmundy/Windows/bio/senescence_skeletal_muscle_myofiber/outputs/',
            sample_dimensions = c('cohort'),
            run_subtype =
              list(
@@ -45,7 +44,8 @@ cfgs <-
                    control_label = 'young',
                    experimental_label = 'old_veh',
                    output_name = 'senescence_skeletal_muscle_myofiber_old_veh_comparison.html',
-                   output_title = 'Young vs Old-veh Comparison Senescent Skeletal Muscle Myofiber, Zhang et al. Replication'
+                   output_title = 'Young vs Old-veh Comparison Senescent Skeletal Muscle Myofiber, Zhang et al. Replication',
+                   output_dir = '/media/awmundy/Windows/bio/senescence_skeletal_muscle_myofiber/outputs/old_veh/'
                  ),
                'old_dq' =
                  list(
@@ -55,7 +55,8 @@ cfgs <-
                    control_label = 'young',
                    experimental_label = 'old_dq',
                    output_name = 'senescence_skeletal_muscle_myofiber_old_dq_comparison.html',
-                   output_title = 'Young vs Old-DQ Comparison Senescent Skeletal Muscle Myofiber, Zhang et al. Replication'
+                   output_title = 'Young vs Old-DQ Comparison Senescent Skeletal Muscle Myofiber, Zhang et al. Replication',
+                   output_dir = '/media/awmundy/Windows/bio/senescence_skeletal_muscle_myofiber/outputs/old_dq/'
                  )
              )
          ))
@@ -65,7 +66,7 @@ cfgs <-
 # run_subtype <- c('population')
 
 run <- 'senescence_skeletal_muscle_myofiber'
-run_subtype <- 'old_dq'
+run_subtype <- 'old_veh'
 
 abundance_root_dir <- cfgs[[run]]$abundance_root_dir
 study_design_path <- cfgs[[run]]$run_subtype[[run_subtype]]$study_design_path
@@ -73,7 +74,7 @@ sample_dimensions <- cfgs[[run]]$sample_dimensions
 explanatory_variable <- cfgs[[run]]$run_subtype[[run_subtype]]$explanatory_variable
 control_label <- cfgs[[run]]$run_subtype[[run_subtype]]$control_label
 experimental_label <- cfgs[[run]]$run_subtype[[run_subtype]]$experimental_label
-output_dir <- cfgs[[run]]$output_dir
+output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
 output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title
 
