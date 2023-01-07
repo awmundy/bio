@@ -2,7 +2,7 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(zeallot)
   library(DropletUtils)
-  library(Seurat) # a huge, powerful, and popular library for analyzing single cell genomic data
+  library(Seurat)
   library(Matrix)
   library(scales)
   library(rjson)
