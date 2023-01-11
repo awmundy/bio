@@ -1,10 +1,9 @@
 import os
 import shutil
-from datetime import datetime as dt
 import subprocess
 from subprocess import PIPE, STDOUT
-import json
 import glob
+from bio.data_prep.config import cfg, run
 
 def fix_fastq_file_names_if_needed(fpaths):
 
@@ -30,7 +29,6 @@ def fix_fastq_file_names_if_needed(fpaths):
             new_fpaths += [fpath]
 
     return new_fpaths
-
 
 def assert_one_fastq_gz_file_in_dir(_dir):
     potential_fastq_files = []
@@ -59,7 +57,7 @@ def prep_fastq_files_diyt(rna_txs_dir, fastq_folders_dir):
     for fastq_dir_name in os.listdir(fastq_folders_dir):
         assert_one_fastq_gz_file_in_dir(fastq_folders_dir + fastq_dir_name)
 
-def prep_fastq_files(cfg, run_type):
+def prep_fastq_files(cfg, run):
     '''Moves each fastq into its own subdir, makes a subdir for storing all of these subdirs, and makes
     the fastq files/dirs have consistent file extensions
     params:
@@ -68,20 +66,21 @@ def prep_fastq_files(cfg, run_type):
                           their own subdir
     '''
     rna_txs_dir = cfg['rna_txs_dir']
+    sample_map = cfg['sample_map']
 
     # make a directory for storing fastq folders
     fastq_folders_dir = rna_txs_dir + 'fastq_folders/'
     os.makedirs(fastq_folders_dir, exist_ok=True)
 
-    if run_type == 'ac_thymus':
+    if run == 'ac_thymus':
         raw_rna_txs_dir = cfg['raw_rna_txs_dir']
-        prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir)
+        prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir, sample_map)
 
-    elif run_type == 'diyt':
+    elif run == 'diyt':
         prep_fastq_files_diyt(rna_txs_dir, fastq_folders_dir)
 
-    elif run_type == 'senescence_skeletal_muscle_myofiber':
-        prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_folders_dir)
+    elif run in ['senescence_skeletal_muscle_myofiber', 'age_related_steatohepatitis']:
+        prep_fastq_files_from_geo(rna_txs_dir, fastq_folders_dir, sample_map)
 
     else:
         raise Exception('Invalid run_type')
@@ -96,7 +95,6 @@ def get_fastq_fpaths(_dir, ignore_fastq_folders_dir=False):
         fastq_paths = [x for x in fastq_paths if 'fastq_folders' not in x]
 
     return fastq_paths
-
 
 def fastqc(rna_txs_dir, threads):
     """use fastqc to do some quality control checks on raw seq data
@@ -117,8 +115,12 @@ def fastqc(rna_txs_dir, threads):
             fastq_paths_where_fastqc_is_needed += [fastq_path]
 
     if len(fastq_paths_where_fastqc_is_needed) > 0:
+
         print('building fastqc output for the following fastq files:', fastq_paths_where_fastqc_is_needed)
-        cmd = 'fastqc ' + ' '.join(fastq_paths_where_fastqc_is_needed)
+        cmd = "fastqc "
+        # handle spaces in paths
+        for path in fastq_paths_where_fastqc_is_needed:
+            cmd += " \'" + path + "\'"
         # each thread handles one fastq file and writes the output in the dir of the fastq file being processed
         cmd += f' -t {threads}'
         subprocess.run(cmd, shell=True)
@@ -128,7 +130,6 @@ def fastqc(rna_txs_dir, threads):
 def get_index_fpath_from_ref_genome_fpath(ref_genome_fpath):
     index_fpath = ref_genome_fpath.replace('.fa.gz', '') + '.index'
     return index_fpath
-
 
 def kallisto_build_index(ref_genome_fpath):
 
@@ -147,7 +148,6 @@ def get_fastq_files_list_and_assert_n_files(sample_fastq_folder, expected_number
     assert len(fastq_files) == expected_number_of_fastq_files
 
     return fastq_files
-
 
 def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
     """
@@ -185,7 +185,7 @@ def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
 
         cmd = (f"kallisto quant "
                f"-i {index_fpath} "
-               f"-o {sample_fastq_folder} " # output directory == fastq file(s) location
+               f"-o '{sample_fastq_folder}' " # output directory == fastq file(s) location
                f"-t {threads} ")
 
         if seq_params['read_end_type'] == '--single':
@@ -194,10 +194,12 @@ def kallisto_quant(index_fpath, rna_txs_dir, threads, seq_params):
             cmd += seq_params['read_end_type'] + ' '
             cmd += f"-l {seq_params['frag_length']} "
             cmd += f"-s {seq_params['frag_length_sd']} "
-            cmd += fastq_file_path
+            cmd += f"'{fastq_file_path}' "
         elif seq_params['read_end_type'] == '--double':
-            fastq_files = get_fastq_files_list_and_assert_n_files(sample_fastq_folder, 2)
-            cmd += ' '.join(fastq_files)
+            fastq_file_paths = get_fastq_files_list_and_assert_n_files(sample_fastq_folder, 2)
+            for path in fastq_file_paths:
+                cmd += " \'" + path + "\'"
+
 
         log_path = sample_fastq_folder + 'kallisto_quant_log.log'
         # todo figure out how to print stuff out as it's running instead of once subprocess has completed
@@ -227,7 +229,7 @@ def multiqc(rna_txs_dir):
 
     # if there are existing multiqc report, multiqc automatically will make new subdirs
     # to save new runs in
-    cmd = f'multiqc -d {rna_txs_dir} -o {multiqc_dir}'
+    cmd = f"multiqc -d '{rna_txs_dir}' -o '{multiqc_dir}'"
     subprocess.run(cmd, shell=True)
 
 def get_single_lane_fastq_file_path(raw_sample_dir, lane_label, read_type):
@@ -237,27 +239,13 @@ def get_single_lane_fastq_file_path(raw_sample_dir, lane_label, read_type):
     assert os.path.exists(file_path)
     return file_path
 
-def get_ac_thymus_sample_rename_map():
-    sample_rename = {'Sample_Thy_O_CX3pos1_IGO_11991_B_7': 'cx3_pos_old_1',
-                     'Sample_Thy_O_CX3pos2_IGO_11991_B_9': 'cx3_pos_old_2',
-                     'Sample_Thy_O_CX3pos3_IGO_11991_B_11': 'cx3_pos_old_3',
-                     'Sample_Thy_Y_CX3neg1_IGO_11991_B_2': 'cx3_neg_young_1',
-                     'Sample_Thy_Y_CX3neg2_IGO_11991_B_4': 'cx3_neg_young_2',
-                     'Sample_Thy_Y_CX3neg3_IGO_11991_B_6': 'cx3_neg_young_3',
-                     'Sample_Thy_Y_CX3pos1_IGO_11991_B_1': 'cx3_pos_young_1',
-                     'Sample_Thy_Y_CX3pos2_IGO_11991_B_3': 'cx3_pos_young_2'
-                     }
-    return sample_rename
-
-def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
-
-    sample_rename = get_ac_thymus_sample_rename_map()
+def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir, sample_map):
 
     # create dict mapping raw file dir to combined file dir
     dirs_to_process = {}
     for raw_sample_label in os.listdir(raw_rna_txs_dir):
         # get new label for the sample folders and files
-        new_sample_label = sample_rename[raw_sample_label]
+        new_sample_label = sample_map[raw_sample_label]
         combined_sample_dir = fastq_folders_dir + new_sample_label + '/'
         if not os.path.exists(combined_sample_dir):
             dirs_to_process[new_sample_label] = {'raw_sample_dir': raw_rna_txs_dir + raw_sample_label + '/',
@@ -284,30 +272,21 @@ def prep_fastq_files_ac_thymus(raw_rna_txs_dir, fastq_folders_dir):
             assert os.path.getsize(combined_fpath) > 0
             print(f'done combining files {fpath_1} {fpath_2}')
 
-def prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_folders_dir):
+def prep_fastq_files_from_geo(rna_txs_dir, fastq_folders_dir, sra_map):
+    '''
+    moves/renames/combines fastq files from GEO into a single folder for each sample
+
+    rna_txs_dir: dir containing all raw fastq files
+    fastq_folders_dir: dir containing all renamed fastq files, in sample level subdirs
+    sra_map: dict of {sra_id: sample_label, ...}
+    '''
 
     fpaths = get_fastq_fpaths(rna_txs_dir, ignore_fastq_folders_dir=True)
     if len(fpaths) == 0:
         print('All fastq files already moved to their own subdir in', fastq_folders_dir)
         return
 
-    # mapping of filename (sra id) to sample type
-    sample_map = {
-        'SRR15931118': 'young_1',
-        'SRR15931119': 'young_2',
-        'SRR15931120': 'young_3',
-        'SRR15931121': 'young_4',
-        'SRR15931122': 'old_1',
-        'SRR15931123': 'old_2',
-        'SRR15931124': 'old_3',
-        'SRR15931125': 'old_4',
-        'SRR15931126': 'old_senolytics_1',
-        'SRR15931127': 'old_senolytics_2',
-        'SRR15931128': 'old_senolytics_3',
-        'SRR15931129': 'old_senolytics_4',
-        }
-
-    for sra_id, sample_label in sample_map.items():
+    for sra_id, sample_label in sra_map.items():
         os.makedirs(f'{fastq_folders_dir}{sample_label}/')
 
         # rename and move files to new directory
@@ -316,43 +295,16 @@ def prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_fold
         os.rename(f'{rna_txs_dir}{sra_id}_pass_2.fastq.gz',
                   f'{fastq_folders_dir}/{sample_label}/{sample_label}_r2.fastq.gz')
 
-
-
 ## Flow ##
 # <Download fasta file> -> fasta file -> <kallisto> -> index
 # <Download fastq files> -> <Move fastq files> -> fastq files -> <fastqc> - > HTML output
 # index + fastq file -> kallisto quant
 # fastqc output + kallisto quant output -> multiqc
 
-# directory to store inputs and outputs in, change as needed
-project_dir = '/media/awmundy/Windows/bio/'
-external_drive = '/media/awmundy/TOSHIBA EXT/'
-
-cfgs = \
-    {'diyt':
-        {# http://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/cdna/
-         'ref_genome': f'{project_dir}reference_genomes/human/Homo_sapiens.GRCh38.cdna.all.fa.gz',
-         # files source (course dataset): https://drive.google.com/drive/folders/1sEk1od1MJKLjqyCExYyfHc0n7DAIy_x7
-         'rna_txs_dir': f'{project_dir}diyt/rna_txs/',
-         'seq_params': {'read_end_type': '--single', 'frag_length': 250, 'frag_length_sd': 30}},
-    'ac_thymus':
-        {# http://ftp.ensembl.org/pub/release-106/fasta/mus_musculus/cdna/
-         'ref_genome': f'{project_dir}reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
-         'raw_rna_txs_dir': f'{project_dir}ac_thymus/raw_rna_txs/',
-         'rna_txs_dir': f'{project_dir}ac_thymus/rna_txs/',
-         'seq_params': {'read_end_type': '--double'}},
-    'senescence_skeletal_muscle_myofiber':
-        {'ref_genome': f'{project_dir}reference_genomes/mouse/Mus_musculus.GRCm39.cdna.all.fa.gz',
-         'rna_txs_dir': f'{project_dir}senescence_skeletal_muscle_myofiber/rna_txs/',
-         'seq_params': {'read_end_type': '--double'}}
-        }
-
-run_type = 'age_related_steatohepatitis'
-cfg = cfgs[run_type]
 threads = 6
 
 index_fpath = kallisto_build_index(cfg['ref_genome'])
-prep_fastq_files(cfg, run_type)
+prep_fastq_files(cfg, run)
 fastqc(cfg['rna_txs_dir'], threads)
 kallisto_quant(index_fpath, cfg['rna_txs_dir'], threads, cfg['seq_params'])
 multiqc(cfg['rna_txs_dir'])
