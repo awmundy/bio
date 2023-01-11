@@ -1,7 +1,7 @@
 import subprocess
 import os
 import shutil
-from bio.data_prep.config import cfgs, run
+from bio.data_prep.config import cfg, run
 
 def write_to_log(output, log):
     for line in output.stdout.splitlines():
@@ -19,15 +19,16 @@ def write_to_log(output, log):
 
 # can't write directly to external drive with prefetch, need to write to temp drive and then move
 home_dir = os.path.expanduser('~') + '/'
-temp_output_dir = f'{home_dir}temp_sra_download/{run}/rna_txs/'
-temp_rna_txs_dir = f'{temp_output_dir}rna_txs/'
+
+temp_download_dir = f'{home_dir}temp_sra_download/'
+temp_output_dir = f'{temp_download_dir}{run}/rna_txs/'
 temp_log_dir = f'{temp_output_dir}fastq_download_logs/'
-output_dir = f'/media/awmundy/TOSHIBA EXT/{run}/'
-os.makedirs(temp_rna_txs_dir, exist_ok=True)
+output_dir = cfg['rna_txs_dir']
+os.makedirs(temp_download_dir, exist_ok=True)
 os.makedirs(temp_log_dir, exist_ok=True)
 os.makedirs(output_dir, exist_ok=True)
 
-sra_ids = cfgs[run]['sra_map'].keys()
+sra_ids = cfg['sample_map'].keys()
 
 # requires sra-toolkit command line tool (apt install sra-toolkit)
 for sra_id in sra_ids:
@@ -47,4 +48,4 @@ for sra_id in sra_ids:
 
 # move files to storage drive and clean up
 shutil.move(temp_output_dir, output_dir)
-os.rmdir(temp_output_dir)
+os.rmdir(temp_download_dir)
