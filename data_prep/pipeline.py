@@ -326,6 +326,7 @@ def prep_fastq_files_senescence_skeletal_muscle_myofiber(rna_txs_dir, fastq_fold
 
 # directory to store inputs and outputs in, change as needed
 project_dir = '/media/awmundy/Windows/bio/'
+external_drive = '/media/awmundy/TOSHIBA EXT/'
 
 cfgs = \
     {'diyt':
@@ -346,7 +347,7 @@ cfgs = \
          'seq_params': {'read_end_type': '--double'}}
         }
 
-run_type = 'senescence_skeletal_muscle_myofiber'
+run_type = 'age_related_steatohepatitis'
 cfg = cfgs[run_type]
 threads = 6
 
