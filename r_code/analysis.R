@@ -40,6 +40,7 @@ suppressPackageStartupMessages({
   library(msigdbr)
   library(clusterProfiler)
   library(enrichplot)
+  library(grid)
 }) 
 
 #' # Functions
@@ -988,16 +989,18 @@ plot_gsea_bubble <- function(gsea_df, write_output, gsea_bubble_plot_path) {
 plot_gsea_line <- function(gsea_res, gsea_df, write_output, 
                            gsea_line_plot_path) {
   
-  plt <- gseaplot2(gsea_res, geneSetID = gsea_df$ID,
-            title = gsea_df$Description)
+  for (idx in 1:nrow(gsea_df)) {
+    print(gseaplot2(gsea_res, geneSetID = gsea_df$ID[idx],
+                     title = gsea_df$Description[idx]))
+  } 
   
-  if (write_output) {
-    pdf(gsea_line_plot_path)
-    plt
-    dev.off()
-  } else {
-    plt
-  }
+  # if (write_output) {
+  #   pdf(gsea_line_plot_path)
+  #   plt
+  #   dev.off()
+  # } else {
+  #   plt
+  # }
 }
 
 plot_gsea_datatable <- function(gsea_df, write_output, 
