@@ -59,14 +59,32 @@ cfgs <-
                    output_dir = '/media/awmundy/Windows/bio/senescence_skeletal_muscle_myofiber/outputs/old_dq/'
                  )
              )
-         ))
+         ),
+       'age_related_steatohepatitis' =
+         list(
+           abundance_root_dir =
+             '/media/awmundy/TOSHIBA EXT/age_related_steatohepatitis/rna_txs/fastq_folders/',
+           sample_dimensions = c('cohort'),
+           run_subtype =
+             list('old' =
+                    list(
+                      explanatory_variable = 'cohort',
+                      study_design_path =
+                        '/media/awmundy/Windows/bio/age_related_steatohepatitis/study_design/study_design.csv',
+                      control_label = 'young',
+                      experimental_label = 'old',
+                      output_name = 'age_related_steatohepatitis_young_vs_old_comparison.html',
+                      output_title = 'Young vs Old Comparison Age Related Steatohepatitis, Duan et al. Replication',
+                      output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/'
+                    )
+       )))
 
 # run <- 'ac_thymus'
 # run_subtype <- c('age')
 # run_subtype <- c('population')
 
-run <- 'senescence_skeletal_muscle_myofiber'
-run_subtype <- 'old_veh'
+run <- 'age_related_steatohepatitis'
+run_subtype <- 'old'
 
 abundance_root_dir <- cfgs[[run]]$abundance_root_dir
 study_design_path <- cfgs[[run]]$run_subtype[[run_subtype]]$study_design_path
@@ -77,6 +95,10 @@ experimental_label <- cfgs[[run]]$run_subtype[[run_subtype]]$experimental_label
 output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
 output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
 
 
 multiple_testing_correction_method <- "BH"
