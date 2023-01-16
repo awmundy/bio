@@ -68,8 +68,10 @@ cfgs <-
            sample_dimensions = c('cohort'),
            custom_gene_sets_path = 
              '/media/awmundy/Windows/bio/age_related_steatohepatitis/custom_gene_sets/custom_gene_sets.csv',
-           min_cpm = 2,
-           min_samples_with_min_cpm = 4,
+           # cpm chosen to be about 10-15 reads per million, based on guidance here: 
+           # https://f1000research.com/articles/5-1438
+           min_cpm = .5,
+           min_samples_with_min_cpm = 2,
            run_subtype =
              list('old' =
                     list(
