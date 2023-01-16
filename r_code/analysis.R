@@ -1252,30 +1252,30 @@ plot_dge_datatable(sig_dge, gsea_datatable_out_path, write_output)
 
 #' # Functional Enrichment Analysis
 
-# # split out into upregulated and downregulated sets
-# sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
-# sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
-# plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
-#                               gost_plot_up_path, write_output,
-#                               'Significantly Upregulated Pathways')
-# plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
-#                               gost_plot_down_path, write_output,
-#                               'Significantly Downregulated Pathways')
-# 
-# gene_sets <- get_gene_sets(custom_gene_sets_path)
-# gsea_input <- get_gsea_input(sig_dge)
-# gsea_res <- get_gsea_res(gsea_input, gene_sets)
-# gsea_df <- as_tibble(gsea_res@result)
-# 
-# plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
-# 
-# if (nrow(gsea_df) > 0) {
-#   # subset to a reasonable number of gene sets for plotting
-#   gsea_df_filtered <- 
-#     filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
-#   plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
-#   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
-# }
+# split out into upregulated and downregulated sets
+sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
+sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
+plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
+                              gost_plot_up_path, write_output,
+                              'Significantly Upregulated Pathways')
+plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
+                              gost_plot_down_path, write_output,
+                              'Significantly Downregulated Pathways')
+
+gene_sets <- get_gene_sets(custom_gene_sets_path)
+gsea_input <- get_gsea_input(sig_dge)
+gsea_res <- get_gsea_res(gsea_input, gene_sets)
+gsea_df <- as_tibble(gsea_res@result)
+
+plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+
+if (nrow(gsea_df) > 0) {
+  # subset to a reasonable number of gene sets for plotting
+  gsea_df_filtered <-
+    filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
+  plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
+  plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
+}
 
 #' # Gene/Sample Cluster Heatmaps
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
@@ -1286,13 +1286,6 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
     dplyr::filter(gene_sets_custom, gene_sets_custom$gs_name == gene_set_label)
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
 }
-
-
-# plot_gene_cluster_heatmaps(sig_dge, 
-#                            log_cpm_filt_norm,
-#                            gene_cluster_heatmap_gene_scaling_out_path,
-#                            gene_cluster_heatmap_sample_scaling_out_path,
-#                            write_output)
 
 #' # QC
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
