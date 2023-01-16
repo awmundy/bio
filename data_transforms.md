@@ -67,7 +67,10 @@ Purpose:
     samples are filtered out
 - Purpose:
   - To filter out genes that are so lowly expressed across samples that analysis
-    on them is not useful
+    on them is not useful. Filtering out lowly expressed genes can also result in a higher
+    quantity of differentially expressed genes, because false discovery rate correction then removes 
+    fewer genes. The thresholds are set so that at least a few samples have ~10-15 reads per million 
+    links: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2906865/ https://f1000research.com/articles/5-1438
 - Record Level:
   - Gene
 - Unit:
