@@ -561,7 +561,7 @@ plot_dge_volcano <- function(dge,
 plot_dge_datatable <- function(sig_dge,
                                gsea_datatable_out_path,
                                write_output) {
-  sig_dge <- select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
+  sig_dge <- dplyr::select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
   
   # build and write datatable for a pretty output
   dtable <- datatable(
@@ -900,7 +900,8 @@ plot_gost_gene_set_enrichment <- function(sig_dge, organism, out_path,
   # default args return significantly enriched gene sets at a 0.05 threshold
   gost_res <- gost(unique_genes,
                    organism = organism,
-                   correction_method = "fdr")
+                   correction_method = "fdr", 
+                   sources= c('GO:BP', 'GO:MF', 'GO:CC'))
   
   out_plot <- gostplot(gost_res, interactive = T, capped = T)
   out_plot <- layout(out_plot, title=title)
@@ -951,9 +952,11 @@ get_msig_hallmark_labels_of_interest <- function() {
 get_gsea_input <- function(sig_dge) {
   # builds a sorted differentially expressed gene input for gsea analysis
   
-  # drop dupes bc gsea function doesn't handle them consistently
-  no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE)
-  
+  # drop dupes on both gene id and logfc bc gsea function doesn't handle 
+  # them consistently
+  no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE) %>% 
+    distinct(logFC, .keep_all=TRUE) 
+
   # build sorted list since the GSEA function needs it that way
   gsea_input <- no_dupes_sig_dge$logFC
   names(gsea_input) <- as.character(no_dupes_sig_dge$gene_id)
@@ -969,17 +972,21 @@ get_gsea_res <- function(gsea_input, gene_sets) {
   return(gsea_res)  
 }
 
-plot_gsea_bubble <- function(gsea_df, write_output, gsea_bubble_plot_path) {
+plot_gsea_bubble <- function(gsea_df_filtered, write_output, gsea_bubble_plot_path) {
   # bubble plot
   # - bubble size: number of genes in the gene set
   # - color: enrichment score
   # - transparency: -log10 adjusted p value
-  bubble_plot_df <- mutate(gsea_df,
+  bubble_plot_df <- mutate(gsea_df_filtered,
                            phenotype = case_when(NES > 0 ~ "intervention",
                                                  NES < 0 ~ "control"))
-  plt <- ggplot(bubble_plot_df, aes(x=phenotype, y=ID)) +
-    geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
-    scale_color_gradient(low="blue", high="red") +
+  plt <- ggplot(bubble_plot_df, aes(x = phenotype, y = ID)) +
+    geom_point(aes(
+      size = setSize,
+      color = NES,
+      alpha = -log10(p.adjust)
+    )) +
+    scale_color_gradient(low = "blue", high = "red") +
     theme_bw()
 
   if (write_output) {
@@ -991,12 +998,12 @@ plot_gsea_bubble <- function(gsea_df, write_output, gsea_bubble_plot_path) {
   }
 }
 
-plot_gsea_line <- function(gsea_res, gsea_df, write_output, 
+plot_gsea_line <- function(gsea_res, gsea_df_filtered, write_output, 
                            gsea_line_plot_path) {
   
-  for (idx in 1:nrow(gsea_df)) {
-    print(gseaplot2(gsea_res, geneSetID = gsea_df$ID[idx],
-                     title = gsea_df$Description[idx]))
+  for (idx in 1:nrow(gsea_df_filtered)) {
+    print(gseaplot2(gsea_res, geneSetID = gsea_df_filtered$ID[idx],
+                     title = gsea_df_filtered$Description[idx]))
   } 
   
   # if (write_output) {
@@ -1048,19 +1055,33 @@ get_go_gene_sets <- function(ont) {
 }
 
 get_gene_sets <- function(custom_gene_sets_path) {
-  # get and write gsea analysis output
+  # get msig gene sets
   msig_hallmarks <- get_msig_hallmark_labels_of_interest()
   gene_sets <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+
+  # get go gene sets, concat to msig gene sets
+  go_bp_gene_sets <- msigdbr(species = "Mus musculus", category = "C5",
+                             subcategory = "BP")
+  go_bp_gene_sets <- dplyr::select(go_bp_gene_sets, "gs_name", "gene_symbol")
+  gene_sets <- rbind(gene_sets, go_bp_gene_sets)
+
+  # if there are custom gene sets, attach them too
   if (!is.null(custom_gene_sets_path)) {
     gene_sets_custom <- read_csv(custom_gene_sets_path, show_col_types = FALSE)
     gene_sets <- rbind(gene_sets, gene_sets_custom)
   }
   
-  # TODO consider running GSEA on specific gene sets within this one
-  #   (cant run it on all bc GSEA needs some genes excluded?)
-  # go_gene_sets_bp <- get_go_gene_sets('bp')
-  
   return(gene_sets)  
+}
+
+filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways <- function(gsea_df) {
+  gsea_df_down <- dplyr::filter(gsea_df, NES<0)
+  gsea_df_down <- head(gsea_df_down[order(gsea_df_down$p.adjust),], 10)
+  gsea_df_up <- dplyr::filter(gsea_df, NES>=0)
+  gsea_df_up <- head(gsea_df_up[order(gsea_df_up$p.adjust),], 10)
+  gsea_df_filtered <- rbind(gsea_df_down, gsea_df_up)
+  
+  return(gsea_df_filtered)
 }
 
 # import configuration information and write to disk for recordkeeping
@@ -1136,7 +1157,8 @@ plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
-# Sys.sleep(5)
+# sleep to stop knitr bug where plots repeat
+Sys.sleep(5)
 
 #' # Differential Gene Expression
 
@@ -1202,9 +1224,13 @@ gsea_res <- get_gsea_res(gsea_input, gene_sets)
 gsea_df <- as_tibble(gsea_res@result)
 
 plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+
 if (nrow(gsea_df) > 0) {
-  plot_gsea_line(gsea_res, gsea_df, write_output, gsea_line_plot_path)
-  plot_gsea_bubble(gsea_df, write_output, gsea_bubble_plot_path)
+  # subset to a reasonable number of gene sets for plotting
+  gsea_df_filtered <- 
+    filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
+  plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
+  plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
 }
 
 #' # Gene/Sample Cluster Heatmaps
@@ -1238,9 +1264,5 @@ if (compare_to_external_data) {
   )
 }
 
-# # TODO not working yet
-# # temp_isoform_analysis(study_design, explanatory_variable,
-# # 					  abundance_paths, isoform_annotation_path,
-# # 					  external_validation_fasta_reference_path,
-# # 					  isoform_analysis_out_dir)
-# 
+
+# TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
