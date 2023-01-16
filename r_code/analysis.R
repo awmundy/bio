@@ -864,8 +864,8 @@ get_dge_list_filt_norm <- function(gene_counts, sample_labels) {
     build_digital_gene_expression_list(gene_counts, sample_labels)
   
   dge_list_filt <- filter_dge_list(dge_list,
-                                   min_cpm = 2,
-                                   min_samples_with_min_cpm = 5)
+                                   min_cpm = 0,
+                                   min_samples_with_min_cpm = 0)
   
   # adjusts norm factors in dge list samples df, allows comparison across samples
   dge_list_filt_norm <-
@@ -1045,6 +1045,22 @@ get_go_gene_sets <- function(ont) {
   return(gene_sets)
 }
 
+get_gene_sets <- function(custom_gene_sets_path) {
+  # get and write gsea analysis output
+  msig_hallmarks <- get_msig_hallmark_labels_of_interest()
+  gene_sets <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+  if (!is.null(custom_gene_sets_path)) {
+    gene_sets_custom <- read_csv(custom_gene_sets_path, show_col_types = FALSE)
+    gene_sets <- rbind(gene_sets, gene_sets_custom)
+  }
+  
+  # TODO consider running GSEA on specific gene sets within this one
+  #   (cant run it on all bc GSEA needs some genes excluded?)
+  # go_gene_sets_bp <- get_go_gene_sets('bp')
+  
+  return(gene_sets)  
+}
+
 # import configuration information
 source('~/code/bio/r_code/config.R')
 
@@ -1175,16 +1191,9 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
-# get and write gsea analysis output
-msig_hallmarks <- get_msig_hallmark_labels_of_interest()
-gene_sets_msig <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
-
-# TODO consider running GSEA on specific gene sets within this one
-#   (cant run it on all bc GSEA needs some genes excluded?)
-# go_gene_sets_bp <- get_go_gene_sets('bp')
-
+gene_sets <- get_gene_sets(custom_gene_sets_path)
 gsea_input <- get_gsea_input(sig_dge)
-gsea_res <- get_gsea_res(gsea_input, gene_sets_msig)
+gsea_res <- get_gsea_res(gsea_input, gene_sets)
 gsea_df <- as_tibble(gsea_res@result)
 
 plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
