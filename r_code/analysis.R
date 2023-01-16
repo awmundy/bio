@@ -100,16 +100,21 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
 }
 
 
-build_log_cpm_df <- function(dge_list, long) {
+build_log_cpm_df <- function(dge_list, long, control_label) {
   # Construct a logged counts per million df
   
   # uses normalized library sizes by default, as calculated earlier
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
   log_cpm$gene_id <- gsub('"', "", log_cpm$gene_id)
+  
 
   if (long == TRUE) {
     sample_cols <- colnames(log_cpm)[-1]
+    # move control cols to the front so that later plots are 
+    # more straightforward
+    log_cpm <- select(log_cpm, starts_with(control_label), everything())
+    
     log_cpm <- pivot_longer(log_cpm,
                             cols = all_of(sample_cols),
                             names_to = "sample_label",
@@ -787,37 +792,73 @@ get_clusters <- function(cluster_type, sig_dge_mtx) {
   clust <-hclust(cor_dist, method='complete')
 }
 
-plot_gene_cluster_heatmaps <- 
-  function(sig_dge,
-           log_cpm_filt_norm,
-           gene_cluster_heatmap_gene_scaling_out_path,
-           gene_cluster_heatmap_sample_scaling_out_path,
-           write_output) {
+prep_dge_subset_for_heatmap <- function(dge_subset, log_cpm_filt_norm) {
+  # subset to just sample logfc cols to do cluster correlations
+  dge_subset <- dge_subset[, colnames(log_cpm_filt_norm)]
+  row.names(dge_subset) <- dge_subset$gene_id
+  dge_subset <- subset(dge_subset, select=-c(gene_id))
+  dge_subset <- as.matrix(dge_subset)
+  
+  return(dge_subset)
+}
+
+get_dge_subset_by_gene_set_for_heatmap <- function(dge, gene_set, 
+                                                   log_cpm_filt_norm) {
+  
+  dge_subset <- dplyr::filter(dge, gene_id %in% gene_set$gene_symbol)
+  dge_subset <- prep_dge_subset_for_heatmap(dge_subset, log_cpm_filt_norm)
+  
+  return(dge_subset)
+}
+
+get_most_expressed_dge_subset_for_heatmap <- function(dge, log_cpm_filt_norm) {
+  # subset to genes with highest/lowest lfc if necessary
+  if (nrow(dge) > 20) {
+    dge_high_lfc <- head(dge[order(-dge$logFC),], 10)
+    dge_low_lfc <- head(dge[order(dge$logFC),], 10)
+    dge_subset <- rbind(dge_high_lfc, dge_low_lfc)
+  } else {
+    dge_subset <- dge
+  }
+  
+  dge_subset <- prep_dge_subset_for_heatmap(dge_subset, log_cpm_filt_norm)
+  
+  return(dge_subset)
+}
+
+get_gene_cluster_colors <- function(gene_clust) {
+  # group the clusters, k is the number of sample categories
+  gene_clust_groups <- cutree(gene_clust, k=2)
+  
+  # convert the cluster groups to colors
+  gene_clust_colors <- rainbow(length(unique(gene_clust_groups)), 
+                               start=0.1, end=0.9)
+  gene_clust_colors <- gene_clust_colors[as.vector(gene_clust_groups)]
+  
+  return(gene_clust_colors)
+}
+
+plot_gene_cluster_heatmap <- function(dge, log_cpm_filt_norm, gene_set=NULL) {
     
-    # subset to genes with highest/lowest lfc if necessary
-    if (nrow(sig_dge) > 20) {
-      sig_dge_high_lfc <- head(sig_dge[order(-sig_dge$logFC),], 10)
-      sig_dge_low_lfc <- head(sig_dge[order(sig_dge$logFC),], 10)
-      sig_dge_subset <- rbind(sig_dge_high_lfc, sig_dge_low_lfc)
+    if (is.null(gene_set)) {
+      dge_subset <- 
+        get_most_expressed_dge_subset_for_heatmap(dge, log_cpm_filt_norm)
+      plot_title <- paste('Gene Cluster Heatmap for up to', 
+                          '10 highest/lowest LFC genes', 
+                          sep= "\n")
     } else {
-      sig_dge_subset <- sig_dge
+      gene_set_name <-unique(gene_set$gs_name)
+      stopifnot(length(gene_set_name) == 1)
+      dge_subset <- 
+        get_dge_subset_by_gene_set_for_heatmap(dge, gene_set, log_cpm_filt_norm)
+      plot_title <- paste('Gene Cluster Heatmap for', 
+                          gene_set_name, sep= "\n")
     }
-    # subset to just sample logfc cols to do cluster correlations
-    sig_dge_subset <- sig_dge_subset[, colnames(log_cpm_filt_norm)]
-    row.names(sig_dge_subset) <- sig_dge_subset$gene_id
-    sig_dge_subset <- subset(sig_dge_subset, select=-c(gene_id))
-    sig_dge_subset <- as.matrix(sig_dge_subset)
     
-    gene_clust <- get_clusters('gene', sig_dge_subset)
-    sample_clust <- get_clusters('sample', sig_dge_subset)
-    
-    # group the clusters, k is the number of sample categories
-    gene_clust_groups <- cutree(gene_clust, k=2)
-    
-    # convert the cluster groups to colors
-    gene_clust_colors <- rainbow(length(unique(gene_clust_groups)), 
-                                 start=0.1, end=0.9)
-    gene_clust_colors <- gene_clust_colors[as.vector(gene_clust_groups)]
+    gene_clust <- get_clusters('gene', dge_subset)
+    sample_clust <- get_clusters('sample', dge_subset)
+    gene_clust_colors <- get_gene_cluster_colors(gene_clust)
+
     
     heat_colors <- rev(brewer.pal(name="RdBu", n=11))
     
@@ -825,20 +866,17 @@ plot_gene_cluster_heatmaps <-
     # scales the expression of the rows (genes) to better highlight
     # between gene differences
     gene_scaling_heatmap <-
-      heatmap.2(sig_dge_subset,
+      heatmap.2(dge_subset,
                 Rowv = as.dendrogram(gene_clust),
-                Colv = as.dendrogram(sample_clust),
+                # Colv = as.dendrogram(sample_clust),
+                Colv = FALSE,
                 RowSideColors = gene_clust_colors,
                 col = heat_colors, scale = 'row',
                 srtCol = 45,
                 density.info = 'none', trace = 'none',
-                cexRow = 1, cexCol = 1, margins = c(8, 8),
-                main=paste('Gene Cluster Heatmap (gene scaling)', 
-                           'for up to 10 highest/lowest LFC genes', 
-                           sep= "\n"))
-    if (write_output) {
-      png(gene_cluster_heatmap_gene_scaling_out_path)
-      dev.off()}
+                cexRow = 1, cexCol = 1, 
+                # margins = c(4, 4),
+                main=plot_title)
     
     # same as above except no row-wise scaling, making the
     # between sample differences more obvious
@@ -1054,6 +1092,12 @@ get_go_gene_sets <- function(ont) {
   return(gene_sets)
 }
 
+get_custom_gene_sets <- function(custom_gene_sets_path) {
+  gene_sets_custom <- read_csv(custom_gene_sets_path, show_col_types = FALSE)
+  
+  return(gene_sets_custom)
+}
+
 get_gene_sets <- function(custom_gene_sets_path) {
   # get msig gene sets
   msig_hallmarks <- get_msig_hallmark_labels_of_interest()
@@ -1067,7 +1111,7 @@ get_gene_sets <- function(custom_gene_sets_path) {
 
   # if there are custom gene sets, attach them too
   if (!is.null(custom_gene_sets_path)) {
-    gene_sets_custom <- read_csv(custom_gene_sets_path, show_col_types = FALSE)
+    gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
     gene_sets <- rbind(gene_sets, gene_sets_custom)
   }
   
@@ -1208,37 +1252,47 @@ plot_dge_datatable(sig_dge, gsea_datatable_out_path, write_output)
 
 #' # Functional Enrichment Analysis
 
-# split out into upregulated and downregulated sets
-sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
-sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
-plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
-                              gost_plot_up_path, write_output,
-                              'Significantly Upregulated Pathways')
-plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
-                              gost_plot_down_path, write_output,
-                              'Significantly Downregulated Pathways')
-
-gene_sets <- get_gene_sets(custom_gene_sets_path)
-gsea_input <- get_gsea_input(sig_dge)
-gsea_res <- get_gsea_res(gsea_input, gene_sets)
-gsea_df <- as_tibble(gsea_res@result)
-
-plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
-
-if (nrow(gsea_df) > 0) {
-  # subset to a reasonable number of gene sets for plotting
-  gsea_df_filtered <- 
-    filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
-  plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
-  plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
-}
+# # split out into upregulated and downregulated sets
+# sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
+# sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
+# plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
+#                               gost_plot_up_path, write_output,
+#                               'Significantly Upregulated Pathways')
+# plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
+#                               gost_plot_down_path, write_output,
+#                               'Significantly Downregulated Pathways')
+# 
+# gene_sets <- get_gene_sets(custom_gene_sets_path)
+# gsea_input <- get_gsea_input(sig_dge)
+# gsea_res <- get_gsea_res(gsea_input, gene_sets)
+# gsea_df <- as_tibble(gsea_res@result)
+# 
+# plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+# 
+# if (nrow(gsea_df) > 0) {
+#   # subset to a reasonable number of gene sets for plotting
+#   gsea_df_filtered <- 
+#     filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
+#   plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
+#   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
+# }
 
 #' # Gene/Sample Cluster Heatmaps
-plot_gene_cluster_heatmaps(sig_dge, 
-                           log_cpm_filt_norm,
-                           gene_cluster_heatmap_gene_scaling_out_path,
-                           gene_cluster_heatmap_sample_scaling_out_path,
-                           write_output)
+plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
+gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
+for (gene_set_label in unique(gene_sets_custom$gs_name)) {
+  print(gene_set_label)
+  gene_set <- 
+    dplyr::filter(gene_sets_custom, gene_sets_custom$gs_name == gene_set_label)
+  plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
+}
+
+
+# plot_gene_cluster_heatmaps(sig_dge, 
+#                            log_cpm_filt_norm,
+#                            gene_cluster_heatmap_gene_scaling_out_path,
+#                            gene_cluster_heatmap_sample_scaling_out_path,
+#                            write_output)
 
 #' # QC
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
@@ -1263,6 +1317,7 @@ if (compare_to_external_data) {
     write_output
   )
 }
+
 
 
 # TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
