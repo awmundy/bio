@@ -557,34 +557,37 @@ plot_dge_volcano <- function(dge,
 	  }
 }
 
-plot_dge_datatable_and_write_csv <- function(sig_dge,
-                                             dge_csv_out_path,
-                                             gsea_datatable_out_path, 
-                                             write_output) {
-  
+plot_dge_datatable <- function(sig_dge,
+                               gsea_datatable_out_path,
+                               write_output) {
   sig_dge <- select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
   
-	write_csv(sig_dge, file=dge_csv_out_path)
-	
-	# build and write datatable for a pretty output
-	dtable <- datatable(sig_dge, 
-						extensions = c('KeyTable', "FixedHeader"), 
-						caption = 'Significantly Differentially Expressed Genes',
-						rownames = FALSE,
-						selection = 'multiple',
-						filter = 'top',
-						options = list(keys = TRUE, searchHighlight = TRUE,
-						               pageLength = 10, orderMulti = TRUE,
-						               scrollX='400px',
-						               lengthMenu = c("10", "25", "50", "100")))
-	round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
-	dtable <- formatRound(dtable, columns=round_cols, digits=2)
-	
-	if (write_output) {
-	  htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
-	} else {
-	  dtable
-	}
+  # build and write datatable for a pretty output
+  dtable <- datatable(
+    sig_dge,
+    extensions = c('KeyTable', "FixedHeader"),
+    caption = 'Significantly Differentially Expressed Genes',
+    rownames = FALSE,
+    selection = 'multiple',
+    filter = 'top',
+    options = list(
+      keys = TRUE,
+      searchHighlight = TRUE,
+      pageLength = 10,
+      orderMulti = TRUE,
+      scrollX = '400px',
+      lengthMenu = c("10", "25", "50", "100")
+    )
+  )
+  round_cols <-
+    names(dtable$x$data)[!names(dtable$x$data) %in% c('gene_id')]
+  dtable <- formatRound(dtable, columns = round_cols, digits = 2)
+  
+  if (write_output) {
+    htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
+  } else {
+    dtable
+  }
 }
 
 temp_isoform_analysis <- function(study_design, explanatory_variable,
@@ -1064,6 +1067,8 @@ dge_volcano_sig_out_path <-
   paste0(output_dir, "dge_volcano_sig.html")
 dge_csv_out_path <- 
   paste0(output_dir, "dge_table.csv")
+all_dge_csv_out_path <- 
+  paste0(output_dir, "all_dge_table.csv")
 gsea_datatable_out_path <- 
   paste0(output_dir, "dge_table.html")
 isoform_analysis_out_dir <- 
@@ -1112,11 +1117,13 @@ plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
 
-#' # Build Mean/Variance Weights Across Samples for Each Gene 
+#' # Differential Gene Expression
+
+# Build Mean/Variance Weights Across Samples for Each Gene 
 mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
                                                    design_matrix)
 
-#' # Build Differential Gene Expression Dataframe
+# Build Differential Gene Expression Dataframe
 bayes_stats <-
   get_empirical_bayes_differential_expression_stats(mean_variance_weights,
                                                     explanatory_variable,
@@ -1134,7 +1141,7 @@ all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        min_lfc = 0,
                                        max_p_val = 1.0)
 
-#' # Differential Gene Expression Volcano Plots
+# Differential Gene Expression Volcano Plots
 plot_dge_volcano(sig_dge, 
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path, 
@@ -1144,14 +1151,17 @@ plot_dge_volcano(all_dge,
                  dge_volcano_out_path, 
                  write_output)
 
-#' # Differential Gene Expression Table
+# Differential Gene Expression Table
 # merge gene level df with sample cols with gene level df with significance info
 sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
+all_dge <- merge(all_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
 # throw error if any row of sig_dge failed to find a merge
 stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
 
-plot_dge_datatable_and_write_csv(sig_dge, dge_csv_out_path,
-                                 gsea_datatable_out_path, write_output)
+write_csv(sig_dge, file=dge_csv_out_path)
+write_csv(all_dge, file=all_dge_csv_out_path)
+
+plot_dge_datatable(sig_dge, gsea_datatable_out_path, write_output)
 
 #' # Functional Enrichment Analysis
 
