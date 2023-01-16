@@ -866,8 +866,8 @@ get_dge_list_filt_norm <- function(gene_counts, sample_labels, min_cpm,
     build_digital_gene_expression_list(gene_counts, sample_labels)
   
   dge_list_filt <- filter_dge_list(dge_list,
-                                   min_cpm = 0,
-                                   min_samples_with_min_cpm = 0)
+                                   min_cpm = min_cpm,
+                                   min_samples_with_min_cpm = min_samples_with_min_cpm)
   
   # adjusts norm factors in dge list samples df, allows comparison across samples
   dge_list_filt_norm <-
@@ -1135,6 +1135,7 @@ plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
+# Sys.sleep(5)
 
 #' # Differential Gene Expression
 
@@ -1220,7 +1221,6 @@ plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt,
 
 plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
                               sample_cluster_out_path, write_output)
-
 plot_mean_variance_distribution(mean_variance_weights, 
                                 mean_variance_plot_out_path,
                                 write_output)
