@@ -103,6 +103,7 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
 build_log_cpm_df <- function(dge_list, long) {
   # Construct a logged counts per million df
   
+  # uses normalized library sizes by default, as calculated earlier
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
   log_cpm$gene_id <- gsub('"', "", log_cpm$gene_id)
@@ -858,7 +859,8 @@ plot_gene_cluster_heatmaps <-
     #   dev.off()}
   }
 
-get_dge_list_filt_norm <- function(gene_counts, sample_labels) {
+get_dge_list_filt_norm <- function(gene_counts, sample_labels, min_cpm, 
+                                   min_samples_with_min_cpm) {
   
   dge_list <-
     build_digital_gene_expression_list(gene_counts, sample_labels)
@@ -1122,7 +1124,8 @@ gene_counts <- get_gene_counts(abundance_paths, sample_labels, tx_to_gene_df)
 
 #' # Normalization, Filtering, Logging, Converting to Counts per Million
 c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
-  get_dge_list_filt_norm(gene_counts, sample_labels)
+  get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
+                         min_samples_with_min_cpm)
 
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
 
