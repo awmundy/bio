@@ -1063,8 +1063,9 @@ get_gene_sets <- function(custom_gene_sets_path) {
   return(gene_sets)  
 }
 
-# import configuration information
+# import configuration information and write to disk for recordkeeping
 source('~/code/bio/r_code/config.R')
+capture.output(cfgs[[run]], file=paste0(output_dir, "config.csv"))
 
 # Output Paths (only used if not knitting to rmarkdown)
 filtering_and_normalizing_impact_out_path <- 
