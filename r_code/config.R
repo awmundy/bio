@@ -7,6 +7,7 @@ cfgs <-
              '/media/awmundy/Windows/bio/ac_thymus/rna_txs/fastq_folders/',
            output_dir = '/media/awmundy/Windows/bio/ac_thymus/outputs/',
            sample_dimensions = c('population', 'age'),
+           custom_gene_sets_path = NULL,
            explanatory_variables =
              list(
                'population' =
@@ -65,6 +66,10 @@ cfgs <-
            abundance_root_dir =
              '/media/awmundy/TOSHIBA EXT/age_related_steatohepatitis/rna_txs/fastq_folders/',
            sample_dimensions = c('cohort'),
+           custom_gene_sets_path = 
+             '/media/awmundy/Windows/bio/age_related_steatohepatitis/custom_gene_sets/custom_gene_sets.csv',
+           min_cpm = 2,
+           min_samples_with_min_cpm = 4,
            run_subtype =
              list('old' =
                     list(
@@ -92,6 +97,9 @@ sample_dimensions <- cfgs[[run]]$sample_dimensions
 explanatory_variable <- cfgs[[run]]$run_subtype[[run_subtype]]$explanatory_variable
 control_label <- cfgs[[run]]$run_subtype[[run_subtype]]$control_label
 experimental_label <- cfgs[[run]]$run_subtype[[run_subtype]]$experimental_label
+custom_gene_sets_path <- cfgs[[run]]$custom_gene_sets_path
+min_cpm <- cfgs[[run]]$min_cpm
+min_samples_with_min_cpm <- cfgs[[run]]$min_samples_with_min_cpm
 output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
 output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title

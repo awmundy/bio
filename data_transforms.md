@@ -82,8 +82,8 @@ Purpose:
   - Uses Trimmed Mean of M values (TMM) to build sample level normalization factors and
     store them in the sample level df
 - Purpose:
-  - TMM controls for differences in library sizes (read depth) and trims highly expressed genes' counts to mitigate crowding out on the sequencing machine
-  - Allows comparisons across samples
+  - TMM controls for differences in library sizes (read depth) and trims highly expressed genes' counts to mitigate crowding out caused by very highly expressed genes
+  - One step towards allowing comparisons across samples
 - Record Level (Expression):
   - Gene
 - Unit (Expression):
@@ -95,15 +95,14 @@ Purpose:
 
 
 ### CPM/Log 2 transform
-- Description: Converts counts to Normalzed Counts Per Million (CPM) and Log2 transforms it
-  - CPM calc: Counts from DGEList$counts / library size from DGEList Samples * 1,000,000
-  - Applies normalization factors too
+- Description: Converts counts to normalzed Counts Per Million (CPM) and Log2 transforms it
+  - CPM calc: Normalized counts from DGEList$counts / normalized library size from DGEList Samples * 1,000,000
 - Purpose:
   - Logging helps mitigate heteroskedasticity (variance increases as the genes count increases)
     - Heteroskedasticity makes comparing highly expressed genes across samples challenging
     - Log transforming the counts mitigates this, although the resulting dataset is
       slightly heteroskedastic towards lowly expressed genes
-  - CPM allows for comparisons between samples by controlling for different amounts of reads 
+  - In conjuction with the TMM values from the previous normalization, CPM allows for comparisons between samples by controlling for different amounts of reads 
     in each sample
 
 

@@ -838,21 +838,21 @@ plot_gene_cluster_heatmaps <-
     
     # same as above except no row-wise scaling, making the
     # between sample differences more obvious
-    sample_scaling_heatmap <-
-      heatmap.2(sig_dge_subset,
-                Rowv = as.dendrogram(gene_clust),
-                Colv = as.dendrogram(sample_clust),
-                RowSideColors = gene_clust_colors,
-                col = heat_colors, scale = 'none',
-                srtCol = 45,
-                density.info = 'none', trace = 'none',
-                cexRow = 1, cexCol = 1, margins = c(8, 8),
-                main=paste('Gene Cluster Heatmap (sample scaling)', 
-                           'for up to 10 highest/lowest LFC genes', 
-                           sep= "\n"))
-    if (write_output) {
-      png(gene_cluster_heatmap_sample_scaling_out_path)
-      dev.off()}
+    # sample_scaling_heatmap <-
+    #   heatmap.2(sig_dge_subset,
+    #             Rowv = as.dendrogram(gene_clust),
+    #             Colv = as.dendrogram(sample_clust),
+    #             RowSideColors = gene_clust_colors,
+    #             col = heat_colors, scale = 'none',
+    #             srtCol = 45,
+    #             density.info = 'none', trace = 'none',
+    #             cexRow = 1, cexCol = 1, margins = c(8, 8),
+    #             main=paste('Gene Cluster Heatmap (sample scaling)', 
+    #                        'for up to 10 highest/lowest LFC genes', 
+    #                        sep= "\n"))
+    # if (write_output) {
+    #   png(gene_cluster_heatmap_sample_scaling_out_path)
+    #   dev.off()}
   }
 
 get_dge_list_filt_norm <- function(gene_counts, sample_labels) {
