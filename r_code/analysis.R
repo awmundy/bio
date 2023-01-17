@@ -100,20 +100,21 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
 }
 
 
-build_log_cpm_df <- function(dge_list, long, control_label) {
+build_log_cpm_df <- function(dge_list, control_label, long) {
   # Construct a logged counts per million df
   
   # uses normalized library sizes by default, as calculated earlier
   log_cpm <- cpm(dge_list, log=TRUE)
   log_cpm <- as_tibble(log_cpm, rownames = "gene_id")
   log_cpm$gene_id <- gsub('"', "", log_cpm$gene_id)
-  
+  # move control cols to the front so that later plots are 
+  # more straightforward
+  log_cpm <- select(log_cpm, starts_with(control_label), everything())
+  log_cpm <- select(log_cpm, 'gene_id', everything())
 
   if (long == TRUE) {
     sample_cols <- colnames(log_cpm)[-1]
-    # move control cols to the front so that later plots are 
-    # more straightforward
-    log_cpm <- select(log_cpm, starts_with(control_label), everything())
+
     
     log_cpm <- pivot_longer(log_cpm,
                             cols = all_of(sample_cols),
@@ -393,13 +394,17 @@ plot_impact_of_filtering_and_normalizing <-
     dge_list,
     dge_list_filt,
     dge_list_filt_norm,
+    control_label,
     filtering_and_normalizing_impact_out_path,
     write_output
   ) {
 	
-	log_cpm_long <- build_log_cpm_df(dge_list, long = TRUE)
-	log_cpm_filt_long <- build_log_cpm_df(dge_list_filt, long = TRUE)
-	log_cpm_filt_norm_long <- build_log_cpm_df(dge_list_filt_norm, long = TRUE)
+	log_cpm_long <- 
+	  build_log_cpm_df(dge_list, control_label, long = TRUE)
+	log_cpm_filt_long <- 
+	  build_log_cpm_df(dge_list_filt, control_label, long = TRUE)
+	log_cpm_filt_norm_long <- 
+	  build_log_cpm_df(dge_list_filt_norm, control_label, long = TRUE)
 	
 	plt_1 <- build_log_cpm_plot(log_cpm_long, "unfiltered, non-normalized")
 	plt_2 <- build_log_cpm_plot(log_cpm_filt_long, "filtered, non-normalized")
@@ -415,88 +420,6 @@ plot_impact_of_filtering_and_normalizing <-
 	}
 }
 
-get_external_sample_data_and_study_design <- function(archs4_rnaseq_path) {
-	
-  # TODO if function in use regularly, expose this as an input
-  # three vectors of geo ids, cell population labels, and treatment labels,
-  # all of same length
-  ext_sample_metadata <- 
-    list(ext_sample_geos = 
-           c(),
-         ext_sample_population = 
-           c(),
-         ext_sample_treatment = 
-           c())
-  
-  ## retrieves sample data from an external source for comparison purposes
-	## returns 
-	ext_sample_geos <-
-		ext_sample_metadata$ext_sample_geos
-	ext_sample_population <-
-		ext_sample_metadata$ext_sample_population
-	ext_sample_treatment <-
-		ext_sample_metadata$ext_sample_treatment
-	
-	# h5ls(archs4_rnaseq_path)
-	
-	all_arch_sample_geos <-
-		h5read(archs4_rnaseq_path, name = "meta/samples/geo_accession")
-	
-	ext_idxs <- which(all_arch_sample_geos %in% ext_sample_geos)
-	stopifnot(length(ext_sample_geos) == length(ext_idxs))
-	
-	ext_sample_source_name <- 
-		h5read(archs4_rnaseq_path, "meta/samples/source_name_ch1")[ext_idxs]
-	ext_sample_labels <- 
-		h5read(archs4_rnaseq_path, name="meta/samples/title")[ext_idxs]
-	ext_study_design <- data.frame(
-		population = ext_sample_population,
-		treatment = ext_sample_treatment,
-		sample_label = ext_sample_labels,
-		source_name = ext_sample_source_name
-	)
-	
-	gene_ids <- h5read(archs4_rnaseq_path, "meta/genes/gene_symbol")
-	
-	# get gene expressions, wide by sample, then transcribe and add col/rownames
-	# TODO determine if these are in cpm already
-	expression <- h5read(archs4_rnaseq_path, "data/expression", 
-						 index=list(ext_idxs, 1:length(gene_ids)))
-	expression <- t(expression)
-	rownames(expression) <- gene_ids
-	colnames(expression) <- all_arch_sample_geos[ext_idxs]
-	
-	ext_dge_list <- DGEList(expression)
-	ext_dge_list <- filter_dge_list(ext_dge_list,
-									min_cpm = 2,
-									min_samples_with_min_cpm = 2)
-	
-	ext_dge_list <- calcNormFactors(ext_dge_list, method = "TMM")
-	ext_cpm <- build_log_cpm_df(ext_dge_list, long = FALSE)
-	
-	external_data <- list(ext_cpm = ext_cpm,
-					 ext_study_design = ext_study_design)
-	
-	return(external_data)
-}
-
-
-plot_external_sample_pca <- function(external_data, pca_scatter_ext_out_path,
-                                     pca_small_multiples_ext_out_path,
-                                     write_output) {
-	
-	ext_pca_metrics <- get_pca_metrics(external_data$ext_cpm)
-	plot_pca_scatter(ext_pca_metrics,
-	                 c('population', 'treatment'),
-	                 external_data$ext_study_design,
-	                 pca_scatter_ext_out_path,
-	                 write_output)
-	plot_pca_small_multiples(ext_pca_metrics,
-	                        c('population', 'treatment'),
-	                        external_data$ext_study_design,
-	                        pca_small_multiples_ext_out_path,
-	                        write_output)
-}
 
 get_design_matrix <- function(study_design, has_intercept, 
 							  explanatory_variable) {
@@ -594,61 +517,6 @@ plot_dge_datatable <- function(sig_dge,
   } else {
     dtable
   }
-}
-
-temp_isoform_analysis <- function(study_design, explanatory_variable,
-								  abundance_paths, isoform_annotation_path,
-								  fasta_reference_path,
-								  isoform_analysis_out_dir) {
-	
-	# build design matrix specific to isoform anaysis library
-	isoform_design_matrix <- 
-		dplyr::select(study_design, sample_label, explanatory_variable)
-	isoform_design_matrix <- 
-		dplyr::rename(isoform_design_matrix, 
-					  sampleID=sample_label, 
-					  condition=explanatory_variable)
-	
-	# build object containing abundances needed for the next step
-	abundance_list <- importIsoformExpression(sampleVector = abundance_paths)
-	colnames(abundance_list$abundance) <- c("isoform_id", sample_labels) 
-	colnames(abundance_list$counts) <- c("isoform_id", sample_labels) 
-	
-	# TODO not working with the mouse reference data I've tried
-	switch_list <- importRdata(
-		isoformCountMatrix   = abundance_list$counts,
-		isoformRepExpression = abundance_list$abundance,
-		designMatrix         = isoform_design_matrix,
-		removeNonConvensionalChr = TRUE,
-		addAnnotatedORFs=TRUE,
-		ignoreAfterPeriod=TRUE,
-		isoformExonAnnoation = isoform_annotation_path,
-		isoformNtFasta       = fasta_reference_path,
-		showProgress = TRUE)
-	
-	# performs analysis of isoform switches and writes to output location
-	switch_list <- isoformSwitchAnalysisCombined(
-		switchAnalyzeRlist   = switch_list,
-		pathToOutput = isoform_analysis_out_dir)
-	
-	switch_summary <- extractSwitchSummary(switch_list)
-	print(switch_summary)
-	
-	# get the top switches by usage or q-values
-	top_switches <- extractTopSwitches(
-		switch_list, 
-		filterForConsequences = TRUE, 
-		n = 50, 
-		sortByQvals = FALSE) 
-	
-	
-	switchPlot(
-		switch_list,
-		gene='insert_gene_id_here',
-		condition1 = 'condition_1_here',
-		condition2 = 'condition_2_here',
-		localTheme = theme_bw())
-	
 }
 
 get_mean_variance_weights <- function(dge_list_filt_norm,
@@ -868,6 +736,7 @@ plot_gene_cluster_heatmap <- function(dge, log_cpm_filt_norm, gene_set=NULL) {
     gene_scaling_heatmap <-
       heatmap.2(dge_subset,
                 Rowv = as.dendrogram(gene_clust),
+                dendrogram='row',
                 # Colv = as.dendrogram(sample_clust),
                 Colv = FALSE,
                 RowSideColors = gene_clust_colors,
@@ -1193,7 +1062,8 @@ c(dge_list, dge_list_filt, dge_list_filt_norm) %<-%
   get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
                          min_samples_with_min_cpm)
 
-log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, long = FALSE)
+log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
+                                      long = FALSE)
 
 #' # Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
@@ -1233,6 +1103,7 @@ plot_dge_volcano(sig_dge,
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path, 
                  write_output)
+Sys.sleep(5)
 plot_dge_volcano(all_dge, 
                  'All Genes',
                  dge_volcano_out_path, 
@@ -1258,6 +1129,7 @@ sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
 plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
                               gost_plot_up_path, write_output,
                               'Significantly Upregulated Pathways')
+Sys.sleep(5)
 plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
@@ -1277,11 +1149,10 @@ if (nrow(gsea_df) > 0) {
   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
 }
 
-#' # Gene/Sample Cluster Heatmaps
+#' # Gene Cluster Heatmaps
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 for (gene_set_label in unique(gene_sets_custom$gs_name)) {
-  print(gene_set_label)
   gene_set <- 
     dplyr::filter(gene_sets_custom, gene_sets_custom$gs_name == gene_set_label)
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
@@ -1290,6 +1161,7 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
 #' # QC
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
                                          dge_list_filt_norm,
+                                         control_label,
                                          filtering_and_normalizing_impact_out_path, 
                                          write_output)
 
@@ -1298,19 +1170,5 @@ plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels,
 plot_mean_variance_distribution(mean_variance_weights, 
                                 mean_variance_plot_out_path,
                                 write_output)
-
-if (compare_to_external_data) {
-  external_data <-
-    get_external_sample_data_and_study_design(external_validation_archs4_rnaseq_path)
-  
-  plot_external_sample_pca(
-    external_data,
-    pca_scatter_ext_out_path,
-    pca_small_multiples_ext_out_path,
-    write_output
-  )
-}
-
-
 
 # TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
