@@ -1066,8 +1066,9 @@ plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) 
     plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], gseaParam = 1, 
                           stats=fgsea_input) +
       labs(title=title_str) + 
-      theme(plot.title = element_text(hjust = 0.5))
-    # print(plt)
+      theme(plot.title = element_text(hjust = 0.5),
+            # plot.margin = margin(0, 0, 0, 0)
+            )
     plot_list[[gs_name]] <- plt
   }
   
