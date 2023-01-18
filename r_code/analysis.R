@@ -41,6 +41,8 @@ suppressPackageStartupMessages({
   library(clusterProfiler)
   library(enrichplot)
   library(grid)
+  library(fgsea)
+  library(ggpubr)
 }) 
 
 #' # Functions
@@ -259,7 +261,7 @@ plot_pca_scatter <- function(pca_metrics, sample_dimensions,
 									study_design, pca_out_path, write_output) {
 	sample_labels <- study_design$sample_label
 
-		plot_list = list()
+	plot_list = list()
 	for(sample_dimension in sample_dimensions) {
 		# build factor for coloring
 		sample_dimension_factor <- factor(study_design[, sample_dimension])
@@ -486,12 +488,7 @@ plot_dge_volcano <- function(dge,
 	  }
 }
 
-plot_dge_datatable <- function(sig_dge,
-                               gsea_datatable_out_path,
-                               write_output) {
-  sig_dge <- dplyr::select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
-  
-  # build and write datatable for a pretty output
+build_datatable <- function(data, caption_text) {
   dtable <- datatable(
     sig_dge,
     extensions = c('KeyTable', "FixedHeader"),
@@ -506,8 +503,35 @@ plot_dge_datatable <- function(sig_dge,
       orderMulti = TRUE,
       scrollX = '400px',
       lengthMenu = c("10", "25", "50", "100")
-    )
-  )
+    ))
+  
+  return(dtable)
+}
+
+plot_dge_datatable <- function(sig_dge,
+                               gsea_datatable_out_path,
+                               write_output) {
+  sig_dge <- dplyr::select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
+  
+  # build and write datatable for a pretty output
+  # dtable <- datatable(
+  #   sig_dge,
+  #   extensions = c('KeyTable', "FixedHeader"),
+  #   caption = 'Significantly Differentially Expressed Genes',
+  #   rownames = FALSE,
+  #   selection = 'multiple',
+  #   filter = 'top',
+  #   options = list(
+  #     keys = TRUE,
+  #     searchHighlight = TRUE,
+  #     pageLength = 10,
+  #     orderMulti = TRUE,
+  #     scrollX = '400px',
+  #     lengthMenu = c("10", "25", "50", "100")
+  #   )
+  # )
+  dtable <- build_datatable(sig_dge, 
+                           'Significantly Differentially Expressed Genes')
   round_cols <-
     names(dtable$x$data)[!names(dtable$x$data) %in% c('gene_id')]
   dtable <- formatRound(dtable, columns = round_cols, digits = 2)
@@ -726,8 +750,6 @@ plot_gene_cluster_heatmap <- function(dge, log_cpm_filt_norm, gene_set=NULL) {
     gene_clust <- get_clusters('gene', dge_subset)
     sample_clust <- get_clusters('sample', dge_subset)
     gene_clust_colors <- get_gene_cluster_colors(gene_clust)
-
-    
     heat_colors <- rev(brewer.pal(name="RdBu", n=11))
     
     # dge static heatmap , scale='row' computes z score that
@@ -783,7 +805,9 @@ get_dge_list_filt_norm <- function(gene_counts, sample_labels, min_cpm,
   return(list(dge_list, dge_list_filt, dge_list_filt_norm))
 }
 
-get_msig_gene_sets <- function(msig_hallmarks, species) {
+get_msig_gene_sets <- function(species) {
+  msig_hallmarks <- get_msig_hallmark_labels_of_interest()
+  
   # load the gene ontology sets, and filter to the ones that are a part of 
   # the hallmarks we care about
   msig_gene_sets <- msigdbr(species=species, category='H') # H for hallmarks
@@ -880,6 +904,8 @@ get_gsea_res <- function(gsea_input, gene_sets) {
 }
 
 plot_gsea_bubble <- function(gsea_df_filtered, write_output, gsea_bubble_plot_path) {
+  # TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
+  
   # bubble plot
   # - bubble size: number of genes in the gene set
   # - color: enrichment score
@@ -969,8 +995,7 @@ get_custom_gene_sets <- function(custom_gene_sets_path) {
 
 get_gene_sets <- function(custom_gene_sets_path) {
   # get msig gene sets
-  msig_hallmarks <- get_msig_hallmark_labels_of_interest()
-  gene_sets <- get_msig_gene_sets(msig_hallmarks, 'Mus musculus')
+  gene_sets <- get_msig_gene_sets('Mus musculus')
 
   # get go gene sets, concat to msig gene sets
   go_bp_gene_sets <- msigdbr(species = "Mus musculus", category = "C5",
@@ -995,6 +1020,80 @@ filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways <- function(gsea_df) {
   gsea_df_filtered <- rbind(gsea_df_down, gsea_df_up)
   
   return(gsea_df_filtered)
+}
+
+get_fgsea_gene_set_input <- function(gene_sets) {
+  # convert to named list
+  gene_sets_fgsea <- split(gene_sets$gene_symbol, gene_sets$gs_name)
+  return(gene_sets_fgsea)
+}
+
+get_fgsea_input <- function(all_dge) {
+  fgsea_input <- dplyr::select(all_dge, 'gene_id', 't')
+  
+  # drop dupes for both fields bc fgsea does not consistently handle them
+  fgsea_input <- distinct(fgsea_input, gene_id, .keep_all=TRUE) %>% 
+    distinct(t, .keep_all=TRUE) 
+  
+  # order ascending by t statistic to make the dataset ranked
+  fgsea_input <- fgsea_input[order(fgsea_input$t),]
+  
+  # convert to named list
+  fgsea_input <- deframe(fgsea_input)
+  
+  return(fgsea_input)
+}
+
+get_fgsea_response_df <- function(gene_sets_fgsea, fgsea_input) {
+  # todo make unique on gene and unique on t statistic (add .0001)
+  fgsea_res <- fgsea(pathways=gene_sets_fgsea, stats=fgsea_input)
+  fgsea_df <- as_tibble(fgsea_res)
+  
+  return(fgsea_df)  
+}
+
+plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) {
+  plot_list = list()
+  for (gs_name in names(gene_sets_fgsea)) {
+    adj_p_value = fgsea_df[fgsea_df$pathway == gs_name,]$padj
+    adj_p_value = format(round(adj_p_value, digits=4), nsmall=4)
+    # p_val_str = paste0('(FDR Adjusted P-Value: ', adj_p_value, ')')
+    nes <- fgsea_df[fgsea_df$pathway == gs_name,]$NES
+    nes <- format(round(nes, digits=3), nsmall=3)
+    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')' )
+    title_str <- paste(gs_name, subtitle_str, sep='\n')
+    
+    plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], gseaParam = 1, 
+                          stats=fgsea_input) +
+      labs(title=title_str) + 
+      theme(plot.title = element_text(hjust = 0.5))
+    # print(plt)
+    plot_list[[gs_name]] <- plt
+  }
+  
+  grid_title <- text_grob(grid_title_text, size = 15, face = "bold")
+  grid.arrange(grobs=plot_list, 
+               nrow=floor(length(plot_list) / 2), 
+               top=grid_title)
+}
+
+build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
+  gene_sets_fgsea <- get_fgsea_gene_set_input(gene_sets)
+  fgsea_input <- get_fgsea_input(all_dge)
+  fgsea_df <- get_fgsea_response_df(gene_sets_fgsea, fgsea_input)
+  dtable <- build_datatable(fgsea_df, paste0(grid_title_text, ' Table'))
+  print(dtable)
+  
+  if (nrow(fgsea_df) > 0) {
+    fgsea_df_down <- dplyr::filter(fgsea_df, NES<0, padj<.05)
+    fgsea_df_down <- head(fgsea_df_down[order(fgsea_df_down$padj),], 5)
+    fgsea_df_up <- dplyr::filter(fgsea_df, NES>=0, padj<.05)
+    fgsea_df_up <- head(fgsea_df_up[order(fgsea_df_up$padj),], 5)
+    fgsea_df_filtered <- rbind(fgsea_df_down, fgsea_df_up)
+    gene_sets_fgsea_filtered <- gene_sets_fgsea[fgsea_df_filtered$pathway]
+    
+    plot_fgsea(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, grid_title_text)
+  }
 }
 
 # import configuration information and write to disk for recordkeeping
@@ -1099,14 +1198,14 @@ all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        max_p_val = 1.0)
 
 # Differential Gene Expression Volcano Plots
-plot_dge_volcano(sig_dge, 
+plot_dge_volcano(sig_dge,
                  'Significantly Differentially Expressed Genes',
-                 dge_volcano_sig_out_path, 
+                 dge_volcano_sig_out_path,
                  write_output)
 Sys.sleep(5)
-plot_dge_volcano(all_dge, 
+plot_dge_volcano(all_dge,
                  'All Genes',
-                 dge_volcano_out_path, 
+                 dge_volcano_out_path,
                  write_output)
 
 # Differential Gene Expression Table
@@ -1121,7 +1220,7 @@ write_csv(all_dge, file=all_dge_csv_out_path)
 
 plot_dge_datatable(sig_dge, gsea_datatable_out_path, write_output)
 
-#' # Functional Enrichment Analysis
+#' # Gene Ontology GOST plots
 
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
@@ -1134,20 +1233,27 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
-gene_sets <- get_gene_sets(custom_gene_sets_path)
-gsea_input <- get_gsea_input(sig_dge)
-gsea_res <- get_gsea_res(gsea_input, gene_sets)
-gsea_df <- as_tibble(gsea_res@result)
+#' # Gene Set Enrichment Analysis (GSEA)
+gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
+gene_sets_msig <- get_msig_gene_sets('Mus musculus')
+# TODO do the GO gene sets too
+build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
+build_and_plot_fgsea(gene_sets_msig, all_dge, 
+                     'GSEA for Most Significant Highest/Lowest NES MSIGDB Gene Sets')
 
-plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
-
-if (nrow(gsea_df) > 0) {
-  # subset to a reasonable number of gene sets for plotting
-  gsea_df_filtered <-
-    filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
-  plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
-  plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
-}
+# TODO hook up alternate gsea pathway
+# gene_sets <- get_gene_sets(custom_gene_sets_path)
+# gsea_input <- get_gsea_input(sig_dge)
+# gsea_res <- get_gsea_res(gsea_input, gene_sets)
+# gsea_df <- as_tibble(gsea_res@result)
+# plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+# if (nrow(gsea_df) > 0) {
+#   # subset to a reasonable number of gene sets for plotting
+#   gsea_df_filtered <-
+#     filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
+#   plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
+#   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
+# }
 
 #' # Gene Cluster Heatmaps
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
@@ -1171,4 +1277,3 @@ plot_mean_variance_distribution(mean_variance_weights,
                                 mean_variance_plot_out_path,
                                 write_output)
 
-# TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
