@@ -1073,7 +1073,7 @@ plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) 
   
   grid_title <- text_grob(grid_title_text, size = 15, face = "bold")
   grid.arrange(grobs=plot_list, 
-               nrow=floor(length(plot_list) / 2), 
+               ncol=min(length(plot_list), 2), 
                top=grid_title)
 }
 
