@@ -45,7 +45,7 @@ suppressPackageStartupMessages({
   library(ggpubr)
 }) 
 
-#' # Functions
+#' # Functions and Output Paths
 get_abundance_paths <- function(abundance_root_dir, sample_labels) {
   
   abundance_dirs <- list.dirs(abundance_root_dir)[-1]
@@ -423,8 +423,8 @@ plot_impact_of_filtering_and_normalizing <-
 }
 
 
-get_design_matrix <- function(study_design, has_intercept, 
-							  explanatory_variable) {
+get_design_matrix <- function(study_design, has_intercept,
+                              explanatory_variable) {
 	variable_factor <- factor(study_design[, explanatory_variable])
 	if (has_intercept == TRUE) {
 		design_matrix <- model.matrix(variable_factor)
@@ -489,10 +489,10 @@ plot_dge_volcano <- function(dge,
 }
 
 build_datatable <- function(data, caption_text) {
-  dtable <- datatable(
-    sig_dge,
+  dtbl <- datatable(
+    data,
     extensions = c('KeyTable', "FixedHeader"),
-    caption = 'Significantly Differentially Expressed Genes',
+    caption = caption_text,
     rownames = FALSE,
     selection = 'multiple',
     filter = 'top',
@@ -505,39 +505,21 @@ build_datatable <- function(data, caption_text) {
       lengthMenu = c("10", "25", "50", "100")
     ))
   
-  return(dtable)
+  return(dtbl)
 }
 
-plot_dge_datatable <- function(sig_dge,
-                               gsea_datatable_out_path,
+plot_dge_datatable <- function(all_dge,
+                               sig_dge_datatable_out_path,
                                write_output) {
-  sig_dge <- dplyr::select(sig_dge, -any_of(c('t', 'P.Value', 'B')))
-  
-  # build and write datatable for a pretty output
-  # dtable <- datatable(
-  #   sig_dge,
-  #   extensions = c('KeyTable', "FixedHeader"),
-  #   caption = 'Significantly Differentially Expressed Genes',
-  #   rownames = FALSE,
-  #   selection = 'multiple',
-  #   filter = 'top',
-  #   options = list(
-  #     keys = TRUE,
-  #     searchHighlight = TRUE,
-  #     pageLength = 10,
-  #     orderMulti = TRUE,
-  #     scrollX = '400px',
-  #     lengthMenu = c("10", "25", "50", "100")
-  #   )
-  # )
-  dtable <- build_datatable(sig_dge, 
-                           'Significantly Differentially Expressed Genes')
+  sig_dge <- dplyr::select(all_dge, -any_of(c('t', 'P.Value', 'B')))
+  dtable <- build_datatable(all_dge, 
+                           'Gene Expression (counts are log2cpm)')
   round_cols <-
     names(dtable$x$data)[!names(dtable$x$data) %in% c('gene_id')]
   dtable <- formatRound(dtable, columns = round_cols, digits = 2)
   
   if (write_output) {
-    htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
+    htmlwidgets::saveWidget(dtable, sig_dge_datatable_out_path)
   } else {
     dtable
   }
@@ -599,11 +581,10 @@ get_empirical_bayes_differential_expression_stats <-
     # are factors
     linear_stats <- lmFit(mean_variance_weights, design_matrix)
     
-    # makes matrix representing the contrasts that will to be evaluated
-    experimental_column <- paste(explanatory_variable, '_', experimental_label, 
-                                 sep='')
-    control_column <- paste(explanatory_variable, '_', control_label, sep='')
-    contrast_string <- paste(experimental_column, '-', control_column, sep='')
+    # makes matrix representing the contrasts that will be evaluated
+    experimental_column <- paste0(explanatory_variable, '_', experimental_label)
+    control_column <- paste0(explanatory_variable, '_', control_label)
+    contrast_string <- paste0(experimental_column, '-', control_column)
     contrast_matrix <- makeContrasts(contrasts=contrast_string,
                                      levels=design_matrix)
     
@@ -880,96 +861,6 @@ get_msig_hallmark_labels_of_interest <- function() {
   return(msig_hallmarks)
 }
 
-get_gsea_input <- function(sig_dge) {
-  # builds a sorted differentially expressed gene input for gsea analysis
-  
-  # drop dupes on both gene id and logfc bc gsea function doesn't handle 
-  # them consistently
-  no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE) %>% 
-    distinct(logFC, .keep_all=TRUE) 
-
-  # build sorted list since the GSEA function needs it that way
-  gsea_input <- no_dupes_sig_dge$logFC
-  names(gsea_input) <- as.character(no_dupes_sig_dge$gene_id)
-  gsea_input <- sort(gsea_input, decreasing = TRUE)
-  
-  return(gsea_input)
-}
-
-get_gsea_res <- function(gsea_input, gene_sets) {
-  # competitive GSEA with gene level permutations
-  gsea_res <- GSEA(gsea_input, TERM2GENE=gene_sets)
-  
-  return(gsea_res)  
-}
-
-plot_gsea_bubble <- function(gsea_df_filtered, write_output, gsea_bubble_plot_path) {
-  # TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
-  
-  # bubble plot
-  # - bubble size: number of genes in the gene set
-  # - color: enrichment score
-  # - transparency: -log10 adjusted p value
-  bubble_plot_df <- mutate(gsea_df_filtered,
-                           phenotype = case_when(NES > 0 ~ "intervention",
-                                                 NES < 0 ~ "control"))
-  plt <- ggplot(bubble_plot_df, aes(x = phenotype, y = ID)) +
-    geom_point(aes(
-      size = setSize,
-      color = NES,
-      alpha = -log10(p.adjust)
-    )) +
-    scale_color_gradient(low = "blue", high = "red") +
-    theme_bw()
-
-  if (write_output) {
-    pdf(gsea_bubble_plot_path)
-    plt
-    dev.off()
-  } else {
-    plt
-  }
-}
-
-plot_gsea_line <- function(gsea_res, gsea_df_filtered, write_output, 
-                           gsea_line_plot_path) {
-  
-  for (idx in 1:nrow(gsea_df_filtered)) {
-    print(gseaplot2(gsea_res, geneSetID = gsea_df_filtered$ID[idx],
-                     title = gsea_df_filtered$Description[idx]))
-  } 
-  
-  # if (write_output) {
-  #   pdf(gsea_line_plot_path)
-  #   plt
-  #   dev.off()
-  # } else {
-  #   plt
-  # }
-}
-
-plot_gsea_datatable <- function(gsea_df, write_output, 
-                                gsea_datatable_out_path) {
-  dtable <- datatable(gsea_df, 
-                      extensions = c('KeyTable', "FixedHeader"), 
-                      caption = 'Differentially Expressed Genes',
-                      rownames = FALSE,
-                      selection = 'multiple',
-                      filter = 'top',
-                      options = list(keys = TRUE, searchHighlight = TRUE,
-                                     pageLength = 10, orderMulti = TRUE,
-                                     scrollX='400px',
-                                     lengthMenu = c("10", "25", "50", "100")))
-  # round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
-  # dtable <- formatRound(dtable, columns=round_cols, digits=2)
-  
-  if (write_output) {
-    htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
-  } else {
-    dtable
-  }
-}
-
 get_go_gene_sets <- function(ont) {
   # ont is GO category (ontology)
   gene_set_list <- getGO(org='mouse', ont=ont)
@@ -1029,14 +920,16 @@ get_fgsea_gene_set_input <- function(gene_sets) {
 }
 
 get_fgsea_input <- function(all_dge) {
-  fgsea_input <- dplyr::select(all_dge, 'gene_id', 't')
   
-  # drop dupes for both fields bc fgsea does not consistently handle them
-  fgsea_input <- distinct(fgsea_input, gene_id, .keep_all=TRUE) %>% 
-    distinct(t, .keep_all=TRUE) 
-  
-  # order ascending by t statistic to make the dataset ranked
-  fgsea_input <- fgsea_input[order(fgsea_input$t),]
+  fgsea_input <- dplyr::select(all_dge, 'gene_id', 'logFC')
+  # Todo convert this to an assertion that it's unique by gene and
+  # add .0001 to logFC that are the same to distinguish them
+  fgsea_input <- distinct(fgsea_input, gene_id, .keep_all=TRUE) %>%
+    distinct(logFC, .keep_all=TRUE)
+
+  # order descending by the ranking metric although it doesn't seem 
+  # to make a big difference for fgsea
+  fgsea_input <- fgsea_input[order(fgsea_input$logFC),]
   
   # convert to named list
   fgsea_input <- deframe(fgsea_input)
@@ -1045,7 +938,7 @@ get_fgsea_input <- function(all_dge) {
 }
 
 get_fgsea_response_df <- function(gene_sets_fgsea, fgsea_input) {
-  # todo make unique on gene and unique on t statistic (add .0001)
+
   fgsea_res <- fgsea(pathways=gene_sets_fgsea, stats=fgsea_input)
   fgsea_df <- as_tibble(fgsea_res)
   
@@ -1060,11 +953,10 @@ plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) 
     # p_val_str = paste0('(FDR Adjusted P-Value: ', adj_p_value, ')')
     nes <- fgsea_df[fgsea_df$pathway == gs_name,]$NES
     nes <- format(round(nes, digits=3), nsmall=3)
-    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')' )
+    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')', )
     title_str <- paste(gs_name, subtitle_str, sep='\n')
     
-    plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], gseaParam = 1, 
-                          stats=fgsea_input) +
+    plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], stats=fgsea_input) +
       labs(title=title_str) + 
       theme(plot.title = element_text(hjust = 0.5),
             # plot.margin = margin(0, 0, 0, 0)
@@ -1082,8 +974,7 @@ build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
   gene_sets_fgsea <- get_fgsea_gene_set_input(gene_sets)
   fgsea_input <- get_fgsea_input(all_dge)
   fgsea_df <- get_fgsea_response_df(gene_sets_fgsea, fgsea_input)
-  dtable <- build_datatable(fgsea_df, paste0(grid_title_text, ' Table'))
-  print(dtable)
+  dtbl <- build_datatable(fgsea_df, paste0(grid_title_text, ' Table'))
   
   if (nrow(fgsea_df) > 0) {
     fgsea_df_down <- dplyr::filter(fgsea_df, NES<0, padj<.05)
@@ -1095,6 +986,7 @@ build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
     
     plot_fgsea(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, grid_title_text)
   }
+  dtbl
 }
 
 # import configuration information and write to disk for recordkeeping
@@ -1122,7 +1014,7 @@ dge_csv_out_path <-
   paste0(output_dir, "dge_table.csv")
 all_dge_csv_out_path <- 
   paste0(output_dir, "all_dge_table.csv")
-gsea_datatable_out_path <- 
+sig_dge_datatable_out_path <- 
   paste0(output_dir, "dge_table.html")
 isoform_analysis_out_dir <- 
   paste0(output_dir, "isoform_analysis/")
@@ -1143,7 +1035,8 @@ gsea_line_plot_path <-
 gsea_bubble_plot_path <- 
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
-#' # Build study design and design matrix
+#' # Data Preparation
+# Build study design and design matrix
 study_design <- get_study_design_df(study_design_path)
 sample_labels <- study_design$sample_label
 abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
@@ -1151,13 +1044,13 @@ study_design <- assign_abundance_paths_to_study_design(study_design, abundance_p
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 abundance_paths <- study_design$abundance_path
 
-#' # Read abundances and build digital gene expression lists
+# Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
 gene_counts <- get_gene_counts(abundance_paths, sample_labels, tx_to_gene_df)
 
 
-#' # Normalization, Filtering, Logging, Converting to Counts per Million
+# Normalization, Filtering, Logging, Converting to Counts per Million
 c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
   get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
                          min_samples_with_min_cpm)
@@ -1165,17 +1058,7 @@ c(dge_list, dge_list_filt, dge_list_filt_norm) %<-%
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
                                       long = FALSE)
 
-#' # Principal Component Analysis
-pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
-plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
-                 pca_scatter_out_path, write_output)
-plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
-                         pca_small_multiples_out_path, write_output)
-# sleep to stop knitr bug where plots repeat
-Sys.sleep(5)
-
 #' # Differential Gene Expression
-
 # Build Mean/Variance Weights Across Samples for Each Gene 
 mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
                                                    design_matrix)
@@ -1218,11 +1101,9 @@ stopif(sum(is.na(sig_dge[colnames(log_cpm_filt_norm[2])])) > 0)
 
 write_csv(sig_dge, file=dge_csv_out_path)
 write_csv(all_dge, file=all_dge_csv_out_path)
-
-plot_dge_datatable(sig_dge, gsea_datatable_out_path, write_output)
+plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 
 #' # Gene Ontology GOST plots
-
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
@@ -1234,30 +1115,16 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
-#' # Gene Set Enrichment Analysis (GSEA)
+#' # Gene Set Enrichment Analysis (GSEA) for custom gene sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
-gene_sets_msig <- get_msig_gene_sets('Mus musculus')
-# TODO do the GO gene sets too
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
+
+#' # GSEA for MSIG gene sets
+gene_sets_msig <- get_msig_gene_sets('Mus musculus')
 build_and_plot_fgsea(gene_sets_msig, all_dge, 
                      'GSEA for Most Significant Highest/Lowest NES MSIGDB Gene Sets')
 
-# TODO hook up alternate gsea pathway
-# gene_sets <- get_gene_sets(custom_gene_sets_path)
-# gsea_input <- get_gsea_input(sig_dge)
-# gsea_res <- get_gsea_res(gsea_input, gene_sets)
-# gsea_df <- as_tibble(gsea_res@result)
-# plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
-# if (nrow(gsea_df) > 0) {
-#   # subset to a reasonable number of gene sets for plotting
-#   gsea_df_filtered <-
-#     filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
-#   plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
-#   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
-# }
-
-#' # Gene Cluster Heatmaps
-plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
+#' # Gene Cluster Differential Expression Heatmap for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   gene_set <- 
@@ -1265,7 +1132,18 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
 }
 
+#' # Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
+plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
+
 #' # QC
+# Principal Component Analysis
+pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
+plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
+                 pca_scatter_out_path, write_output)
+plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
+                         pca_small_multiples_out_path, write_output)
+# sleep to stop knitr bug where plots repeat
+Sys.sleep(5)
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
                                          dge_list_filt_norm,
                                          control_label,

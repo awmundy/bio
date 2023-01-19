@@ -136,3 +136,107 @@ isoform_analysis <- function(study_design, explanatory_variable,
     localTheme = theme_bw())
   
 }
+
+get_gsea_input <- function(sig_dge) {
+  # builds a sorted differentially expressed gene input for gsea analysis
+  
+  # drop dupes on both gene id and logfc bc gsea function doesn't handle 
+  # them consistently
+  no_dupes_sig_dge <- distinct(sig_dge, gene_id, .keep_all=TRUE) %>% 
+    distinct(logFC, .keep_all=TRUE) 
+  
+  # build sorted list since the GSEA function needs it that way
+  gsea_input <- no_dupes_sig_dge$logFC
+  names(gsea_input) <- as.character(no_dupes_sig_dge$gene_id)
+  gsea_input <- sort(gsea_input, decreasing = TRUE)
+  
+  return(gsea_input)
+}
+
+get_gsea_res <- function(gsea_input, gene_sets) {
+  # competitive GSEA with gene level permutations
+  gsea_res <- GSEA(gsea_input, TERM2GENE=gene_sets)
+  
+  return(gsea_res)  
+}
+
+plot_gsea_bubble <- function(gsea_df_filtered, write_output, gsea_bubble_plot_path) {
+  # TODO figure out if bubble plot axis labels are correct/phenotype in df is correct
+  
+  # bubble plot
+  # - bubble size: number of genes in the gene set
+  # - color: enrichment score
+  # - transparency: -log10 adjusted p value
+  bubble_plot_df <- mutate(gsea_df_filtered,
+                           phenotype = case_when(NES > 0 ~ "intervention",
+                                                 NES < 0 ~ "control"))
+  plt <- ggplot(bubble_plot_df, aes(x = phenotype, y = ID)) +
+    geom_point(aes(
+      size = setSize,
+      color = NES,
+      alpha = -log10(p.adjust)
+    )) +
+    scale_color_gradient(low = "blue", high = "red") +
+    theme_bw()
+  
+  if (write_output) {
+    pdf(gsea_bubble_plot_path)
+    plt
+    dev.off()
+  } else {
+    plt
+  }
+}
+
+plot_gsea_line <- function(gsea_res, gsea_df_filtered, write_output, 
+                           gsea_line_plot_path) {
+  
+  for (idx in 1:nrow(gsea_df_filtered)) {
+    print(gseaplot2(gsea_res, geneSetID = gsea_df_filtered$ID[idx],
+                    title = gsea_df_filtered$Description[idx]))
+  } 
+  
+  # if (write_output) {
+  #   pdf(gsea_line_plot_path)
+  #   plt
+  #   dev.off()
+  # } else {
+  #   plt
+  # }
+}
+
+plot_gsea_datatable <- function(gsea_df, write_output, 
+                                gsea_datatable_out_path) {
+  dtable <- datatable(gsea_df, 
+                      extensions = c('KeyTable', "FixedHeader"), 
+                      caption = 'Differentially Expressed Genes',
+                      rownames = FALSE,
+                      selection = 'multiple',
+                      filter = 'top',
+                      options = list(keys = TRUE, searchHighlight = TRUE,
+                                     pageLength = 10, orderMulti = TRUE,
+                                     scrollX='400px',
+                                     lengthMenu = c("10", "25", "50", "100")))
+  # round_cols <- names(dtable$x$data)[! names(dtable$x$data) %in% c('gene_id')]
+  # dtable <- formatRound(dtable, columns=round_cols, digits=2)
+  
+  if (write_output) {
+    htmlwidgets::saveWidget(dtable, gsea_datatable_out_path)
+  } else {
+    dtable
+  }
+}
+# Alternate GSEA construction using the GSEA library
+# gene_sets <- get_gene_sets(custom_gene_sets_path)
+# gsea_input <- get_gsea_input(sig_dge)
+# gsea_res <- get_gsea_res(gsea_input, gene_sets)
+# gsea_df <- as_tibble(gsea_res@result)
+# plot_gsea_datatable(gsea_df, write_output, gsea_datatable_out_path)
+# if (nrow(gsea_df) > 0) {
+#   # subset to a reasonable number of gene sets for plotting
+#   gsea_df_filtered <-
+#     filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways(gsea_df)
+#   plot_gsea_line(gsea_res, gsea_df_filtered, write_output, gsea_line_plot_path)
+#   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
+# }
+
