@@ -511,11 +511,15 @@ build_datatable <- function(data, caption_text) {
 plot_dge_datatable <- function(all_dge,
                                sig_dge_datatable_out_path,
                                write_output) {
-  sig_dge <- dplyr::select(all_dge, -any_of(c('t', 'P.Value', 'B')))
+  all_dge <- dplyr::select(all_dge, -any_of(c('t', 'P.Value', 'B', 'AveExpr')))
+  # add flag for if logfc is statistically significant
+  all_dge$significant <- with(all_dge, ifelse(adj.P.Val <= .05, 'True', 'False'))
+  all_dge <- relocate(all_dge, significant, .after = adj.P.Val)
+  
   dtable <- build_datatable(all_dge, 
                            'Gene Expression (counts are log2cpm)')
   round_cols <-
-    names(dtable$x$data)[!names(dtable$x$data) %in% c('gene_id')]
+    names(dtable$x$data)[!names(dtable$x$data) %in% c('gene_id', 'significant')]
   dtable <- formatRound(dtable, columns = round_cols, digits = 2)
   
   if (write_output) {
@@ -950,10 +954,10 @@ plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) 
   for (gs_name in names(gene_sets_fgsea)) {
     adj_p_value = fgsea_df[fgsea_df$pathway == gs_name,]$padj
     adj_p_value = format(round(adj_p_value, digits=4), nsmall=4)
-    # p_val_str = paste0('(FDR Adjusted P-Value: ', adj_p_value, ')')
+
     nes <- fgsea_df[fgsea_df$pathway == gs_name,]$NES
     nes <- format(round(nes, digits=3), nsmall=3)
-    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')', )
+    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')', ' Rank: LogFC')
     title_str <- paste(gs_name, subtitle_str, sep='\n')
     
     plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], stats=fgsea_input) +
@@ -1103,18 +1107,6 @@ write_csv(sig_dge, file=dge_csv_out_path)
 write_csv(all_dge, file=all_dge_csv_out_path)
 plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 
-#' # Gene Ontology GOST plots
-# split out into upregulated and downregulated sets
-sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
-sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
-plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
-                              gost_plot_up_path, write_output,
-                              'Significantly Upregulated Pathways')
-Sys.sleep(5)
-plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
-                              gost_plot_down_path, write_output,
-                              'Significantly Downregulated Pathways')
-
 #' # Gene Set Enrichment Analysis (GSEA) for custom gene sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
@@ -1134,6 +1126,18 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
 
 #' # Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
+
+#' # Gene Ontology GOST plots
+# split out into upregulated and downregulated sets
+sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
+sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
+plot_gost_gene_set_enrichment(sig_dge_up, 'mmusculus',
+                              gost_plot_up_path, write_output,
+                              'Significantly Upregulated Pathways')
+Sys.sleep(5)
+plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
+                              gost_plot_down_path, write_output,
+                              'Significantly Downregulated Pathways')
 
 #' # QC
 # Principal Component Analysis
