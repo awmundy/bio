@@ -81,7 +81,7 @@ cfgs <-
                       control_label = 'young',
                       experimental_label = 'old',
                       output_name = 'age_related_steatohepatitis_young_vs_old_comparison.html',
-                      output_title = 'Young vs Old Comparison Age Related Steatohepatitis, Duan et al. Replication',
+                      output_title = 'Differential Gene Expression Replication of Duan et al Steatohepatitis Aging',
                       output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/'
                     )
        )))

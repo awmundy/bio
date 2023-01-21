@@ -43,6 +43,8 @@ suppressPackageStartupMessages({
   library(grid)
   library(fgsea)
   library(ggpubr)
+  library(cowplot)
+  library(knitr)
 }) 
 
 #' # Functions and Output Paths
@@ -71,6 +73,7 @@ get_transcript_to_gene_df <- function(annotation_db){
   tx <- as_tibble(tx)
   tx <- dplyr::rename(tx, target_id = tx_id)
   tx <- dplyr::select(tx, "target_id", "gene_name")
+  tx <- tx[tx$gene_name != '',]
   return(tx)
 }
 
@@ -280,8 +283,7 @@ plot_pca_scatter <- function(pca_metrics, sample_dimensions,
 				# geom_label(nudge_y = 10) +
 				xlab(paste0(first_pc_label, "(", pca_metrics$var_explained[i]*100,"%",")")) +
 				ylab(paste0(second_pc_label, "(", pca_metrics$var_explained[i + 1]*100,"%",")")) +
-				labs(title="PCA plot",
-					 caption=paste0("produced on ", Sys.time())) +
+				labs(title="Sample PCA") +
 			coord_fixed() +
 				# overwrites legend title to be the actual dimension label
 				guides(color=guide_legend(sample_dimension)) +
@@ -949,37 +951,53 @@ get_fgsea_response_df <- function(gene_sets_fgsea, fgsea_input) {
   return(fgsea_df)  
 }
 
-plot_fgsea <- function(gene_sets_fgsea, fgsea_df, fgsea_input, grid_title_text) {
+plot_fgsea <- function(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, 
+                       grid_title_text) {
   plot_list = list()
-  for (gs_name in names(gene_sets_fgsea)) {
+  for (gs_name in names(gene_sets_fgsea_filtered)) {
     adj_p_value = fgsea_df[fgsea_df$pathway == gs_name,]$padj
     adj_p_value = format(round(adj_p_value, digits=4), nsmall=4)
 
     nes <- fgsea_df[fgsea_df$pathway == gs_name,]$NES
     nes <- format(round(nes, digits=3), nsmall=3)
-    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')', ' Rank: LogFC')
+    subtitle_str <- paste0('(FDR PVal: ', adj_p_value, ', NES: ', nes, ')')
     title_str <- paste(gs_name, subtitle_str, sep='\n')
     
-    plt <- plotEnrichment(pathway=gene_sets_fgsea[[gs_name]], stats=fgsea_input) +
+    plt <- plotEnrichment(pathway=gene_sets_fgsea_filtered[[gs_name]], 
+                          stats=fgsea_input) +
       labs(title=title_str) + 
-      theme(plot.title = element_text(hjust = 0.5),
+      theme(plot.title = element_text(hjust = 0.5, size=12),
             # plot.margin = margin(0, 0, 0, 0)
-            )
+            ) +
+      xlab('Rank by LogFC')
     plot_list[[gs_name]] <- plt
   }
   
   grid_title <- text_grob(grid_title_text, size = 15, face = "bold")
-  grid.arrange(grobs=plot_list, 
-               ncol=min(length(plot_list), 2), 
-               top=grid_title)
+  ncol <- min(length(plot_list), 2)
+  nrow <- floor(length(plot_list)/2) + 1
+  # heights <- rep(unit(7, 'cm'), nrow)
+  out <- plot_grid(plotlist=plot_list, nrow=nrow, ncol=ncol)
+  title <- ggdraw() + draw_label(grid_title_text, fontface='bold')
+  print(plot_grid(title, out, ncol=1, rel_heights=c(0.1, 1)))
+
+  # grid.arrange(grobs=plot_list, 
+  #              ncol=ncol, 
+  #              nrow=nrow,
+  #              top=grid_title,
+  #              # heights=list(unit(25, 'cm'), unit(10, 'cm'), unit(10, 'cm'))
+  #              heights=heights,
+  #              )
 }
 
 build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
   gene_sets_fgsea <- get_fgsea_gene_set_input(gene_sets)
   fgsea_input <- get_fgsea_input(all_dge)
   fgsea_df <- get_fgsea_response_df(gene_sets_fgsea, fgsea_input)
+  fgsea_df <- dplyr::select(fgsea_df, -any_of(c('pval', 'log2err')))
   dtbl <- build_datatable(fgsea_df, paste0(grid_title_text, ' Table'))
-  
+  dtbl <- formatRound(dtbl, columns = c('padj', 'ES', 'NES'), digits = 4)
+
   if (nrow(fgsea_df) > 0) {
     fgsea_df_down <- dplyr::filter(fgsea_df, NES<0, padj<.05)
     fgsea_df_down <- head(fgsea_df_down[order(fgsea_df_down$padj),], 5)
@@ -1062,6 +1080,11 @@ c(dge_list, dge_list_filt, dge_list_filt_norm) %<-%
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
                                       long = FALSE)
 
+#' # Flowchart
+# TODO change this to relative path
+include_graphics("/home/awmundy/code/bio/pipeline_flowchart.png", dpi = 110)
+
+
 #' # Differential Gene Expression
 # Build Mean/Variance Weights Across Samples for Each Gene 
 mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
@@ -1090,11 +1113,6 @@ plot_dge_volcano(sig_dge,
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path,
                  write_output)
-Sys.sleep(5)
-plot_dge_volcano(all_dge,
-                 'All Genes',
-                 dge_volcano_out_path,
-                 write_output)
 
 # Differential Gene Expression Table
 # merge gene level df with sample cols with gene level df with significance info
@@ -1107,11 +1125,11 @@ write_csv(sig_dge, file=dge_csv_out_path)
 write_csv(all_dge, file=all_dge_csv_out_path)
 plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 
-#' # Gene Set Enrichment Analysis (GSEA) for custom gene sets
+#' # Gene Set Enrichment Analysis (GSEA) for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
 
-#' # GSEA for MSIG gene sets
+#' # GSEA for MSIG Gene Sets
 gene_sets_msig <- get_msig_gene_sets('Mus musculus')
 build_and_plot_fgsea(gene_sets_msig, all_dge, 
                      'GSEA for Most Significant Highest/Lowest NES MSIGDB Gene Sets')
