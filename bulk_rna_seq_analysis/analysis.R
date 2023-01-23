@@ -1012,7 +1012,8 @@ build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
 }
 
 # import configuration information and write to disk for recordkeeping
-source('~/code/bio/r_code/config.R')
+source('./bulk_rna_seq_analysis/config.R')
+# source('/home/awmundy/code/bio/bulk_rna_seq_analysis/config.R')
 capture.output(cfgs[[run]], file=paste0(output_dir, "config.csv"))
 
 # Output Paths (only used if not knitting to rmarkdown)
@@ -1058,13 +1059,18 @@ gsea_bubble_plot_path <-
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
 #' # Data Preparation
-# Build study design and design matrix
+#' ### First we read in our study design file and construct a design matrix.
+#' ### These objects contain information about our samples, 
+#' ### our variable of interest, and our model specification.
 study_design <- get_study_design_df(study_design_path)
+knitr::kable(study_design)
 sample_labels <- study_design$sample_label
 abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
+knitr::kable(design_matrix)
 abundance_paths <- study_design$abundance_path
+
 
 # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -1081,8 +1087,9 @@ log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label,
                                       long = FALSE)
 
 #' # Flowchart
-# TODO change this to relative path
-include_graphics("/home/awmundy/code/bio/pipeline_flowchart.png", dpi = 110)
+# error=FALSE is required be there is not actually an error
+include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
+                 dpi = 110, error = FALSE)
 
 
 #' # Differential Gene Expression
