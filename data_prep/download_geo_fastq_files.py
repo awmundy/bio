@@ -30,10 +30,11 @@ os.makedirs(output_dir, exist_ok=True)
 
 sra_ids = cfg['sample_map'].keys()
 
-# requires sra-toolkit command line tool (apt install sra-toolkit)
+# Download sra files by sra_id and convert each to fastq
 for sra_id in sra_ids:
     with open(temp_log_dir + 'sra_download_and_fastq_conversion.txt', 'wb') as log:
         print (f'downloading {sra_id}')
+        # requires sra-toolkit command line tool (apt install sra-toolkit)
         cmd = f'prefetch {sra_id} --output-directory {temp_output_dir}'
         sra_download_output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         write_to_log(sra_download_output, log)
