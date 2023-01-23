@@ -92,7 +92,11 @@ cfgs <-
 
 run <- 'age_related_steatohepatitis'
 run_subtype <- 'old'
-
+multiple_testing_correction_method <- "BH"
+# Must be FALSE if knitting to Rmarkdown
+write_output <- FALSE
+compare_to_external_data <- FALSE
+  
 abundance_root_dir <- cfgs[[run]]$abundance_root_dir
 study_design_path <- cfgs[[run]]$run_subtype[[run_subtype]]$study_design_path
 sample_dimensions <- cfgs[[run]]$sample_dimensions
@@ -111,10 +115,7 @@ if (!dir.exists(output_dir)) {
 }
 
 
-multiple_testing_correction_method <- "BH"
-# Must be FALSE if knitting to Rmarkdown
-write_output <- FALSE
-compare_to_external_data <- FALSE
+
 
 
 
