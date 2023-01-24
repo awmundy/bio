@@ -37,6 +37,8 @@ Purpose:
   - Scaled TPM
 - Documentation
   - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4712774/
+  - https://f1000research.com/articles/7-952/v3
+    - Both scaledTPM and lengthScaledTPM are appropriate for differential gene expression
   - https://f1000research.com/articles/4-1521
     - Motivation for us Using gene level data rather than transcript level data
 - Notes
@@ -44,7 +46,8 @@ Purpose:
     - scaledTPM: scaled up to library size by multiplying TPM counts by the library size in
       millions. These counts sum to the mapped read count (library size)
     - lengthScaledTPM: scaled using the average transcript length over samples and then scaled
-      as in scaledTPM. These counts sum to the mapped read count (library size)
+      as in scaledTPM. These counts sum to the mapped read count (library size). This is what is 
+      used in this analysis.
     - Can optionally derive counts from the abundances (this is what is done for this analysis)
 
 
