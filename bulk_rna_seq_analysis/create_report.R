@@ -1,6 +1,6 @@
-suppressPackageStartupMessages(
+suppressPackageStartupMessages({
   library(rmarkdown)
-  )
+  })
 
 # import configuration details to get output_dir and output_name/title
 source('./bulk_rna_seq_analysis/config.R')
