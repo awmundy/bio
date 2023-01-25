@@ -82,6 +82,9 @@ cfgs <-
                       experimental_label = 'old',
                       output_name = 'age_related_steatohepatitis_young_vs_old_comparison.html',
                       output_title = 'Differential Gene Expression Replication of Duan et al Steatohepatitis Aging',
+                      output_description = paste0('This report contains a replication of the differential gene expression analysis ',
+                                                  'comparing young vs old mouse liver cells in the following Duan et al paper: ',
+                                                  'https://www.nature.com/articles/s43587-022-00348-z'),
                       output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/'
                     )
        )))
@@ -109,6 +112,7 @@ min_samples_with_min_cpm <- cfgs[[run]]$min_samples_with_min_cpm
 output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
 output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title
+output_description <- cfgs[[run]]$run_subtype[[run_subtype]]$output_description
 
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
