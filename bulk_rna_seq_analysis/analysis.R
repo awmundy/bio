@@ -1,16 +1,12 @@
 #' ---
-#' date: "<center> _`r Sys.Date()`_ <center>"
-#' output:
-#'   html_document:
+#' author: "Andrew Mundy"
+#' date: ""
+#' output: 
+#'   rmdformats::robobook:
 #'     code_folding: hide
-#'     df_print: paged
-#'     theme: yeti
-#'     highlight: tango
-#'     toc: yes
-#'     number_sections: true
 #' ---
 #' ```{r setup, include=FALSE}
-#' knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+#' knitr::opts_chunk$set(warning=FALSE, message=FALSE, results='asis')
 #' ```
 
 #' # Libraries
