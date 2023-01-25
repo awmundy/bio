@@ -123,7 +123,10 @@ Description:
     observation
 Purpose:
   - Variance of counts may be different across samples, so for cross-sample comparisons 
-    this is useful. The weights from voom are used downstream
+    this is useful. Also, log counts are heteroskedastic, in that variance is generally 
+    lower for higher log count genes. We want to correct for this because we want to be 
+    able to identify differential expression equally well for both high and low log count 
+    genes. The weights from voom are used downstream in lmFit.
 - Record Level:
   - Gene
 - Unit :
