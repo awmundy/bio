@@ -11,24 +11,24 @@
 
 #' # Libraries
 suppressPackageStartupMessages({
-	library(tidyverse)
-	library(tximport)
-	library(ensembldb)
-	library(EnsDb.Mmusculus.v79)
-	library(EnsDb.Hsapiens.v86)
-	library(edgeR)
-	library(matrixStats)
-	library(gridExtra)
-	library(zeallot)
-	library(cowplot)
-	library(rhdf5)
-	library(limma)
-	library(gt)
-	library(plotly)
-	library(DT)
-	library(IsoformSwitchAnalyzeR)
-	library(gplots)
-	library(RColorBrewer)
+  library(tidyverse)
+  library(tximport)
+  library(ensembldb)
+  library(EnsDb.Mmusculus.v79)
+  library(EnsDb.Hsapiens.v86)
+  library(edgeR)
+  library(matrixStats)
+  library(gridExtra)
+  library(zeallot)
+  library(cowplot)
+  library(rhdf5)
+  library(limma)
+  library(gt)
+  library(plotly)
+  library(DT)
+  library(IsoformSwitchAnalyzeR)
+  library(gplots)
+  library(RColorBrewer)
   library(rmarkdown)
   library(ggplot2)
   library(renv)
@@ -99,7 +99,6 @@ build_digital_gene_expression_list <- function(gene_counts, sample_labels) {
   
   return(dge_list)
 }
-
 
 build_log_cpm_df <- function(dge_list, control_label, long) {
   # Construct a logged counts per million df
@@ -419,7 +418,6 @@ plot_impact_of_filtering_and_normalizing <-
 	  print(all_plts)
 	}
 }
-
 
 get_design_matrix <- function(study_design, has_intercept,
                               explanatory_variable) {
@@ -948,7 +946,7 @@ get_fgsea_response_df <- function(gene_sets_fgsea, fgsea_input) {
 }
 
 plot_fgsea <- function(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, 
-                       grid_title_text) {
+                       gsea_plot_grid_title_text) {
   plot_list = list()
   for (gs_name in names(gene_sets_fgsea_filtered)) {
     adj_p_value = fgsea_df[fgsea_df$pathway == gs_name,]$padj
@@ -969,21 +967,13 @@ plot_fgsea <- function(gene_sets_fgsea_filtered, fgsea_df, fgsea_input,
     plot_list[[gs_name]] <- plt
   }
   
-  grid_title <- text_grob(grid_title_text, size = 15, face = "bold")
   ncol <- min(length(plot_list), 2)
   nrow <- floor(length(plot_list)/2) + 1
   # heights <- rep(unit(7, 'cm'), nrow)
   out <- plot_grid(plotlist=plot_list, nrow=nrow, ncol=ncol)
-  title <- ggdraw() + draw_label(grid_title_text, fontface='bold')
+  title <- ggdraw() + draw_label(gsea_plot_grid_title_text, fontface='bold')
   print(plot_grid(title, out, ncol=1, rel_heights=c(0.1, 1)))
 
-  # grid.arrange(grobs=plot_list, 
-  #              ncol=ncol, 
-  #              nrow=nrow,
-  #              top=grid_title,
-  #              # heights=list(unit(25, 'cm'), unit(10, 'cm'), unit(10, 'cm'))
-  #              heights=heights,
-  #              )
 }
 
 build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
@@ -1001,15 +991,23 @@ build_and_plot_fgsea <- function(gene_sets, all_dge, grid_title_text) {
     fgsea_df_up <- head(fgsea_df_up[order(fgsea_df_up$padj),], 5)
     fgsea_df_filtered <- rbind(fgsea_df_down, fgsea_df_up)
     gene_sets_fgsea_filtered <- gene_sets_fgsea[fgsea_df_filtered$pathway]
+    gsea_plot_grid_title_text <- paste0(grid_title_text, ' (Most Significant High/Low NES)')
     
-    plot_fgsea(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, grid_title_text)
+    plot_fgsea(gene_sets_fgsea_filtered, fgsea_df, fgsea_input, gsea_plot_grid_title_text)
   }
   dtbl
 }
 
+simple_datatable <- function(df, round_cols = NULL) {
+  dtable <- datatable(df, options = list(dom='t'), rownames=FALSE)
+  if (!is.null(round_cols)) {
+    dtable <- formatRound(dtable, round_cols, digits = 2)  
+  }
+  dtable
+}
+
 # import configuration information and write to disk for recordkeeping
 source('./bulk_rna_seq_analysis/config.R')
-# source('/home/awmundy/code/bio/bulk_rna_seq_analysis/config.R')
 capture.output(cfgs[[run]], file=paste0(output_dir, "config.csv"))
 
 # Output Paths (only used if not knitting to rmarkdown)
@@ -1054,41 +1052,131 @@ gsea_line_plot_path <-
 gsea_bubble_plot_path <- 
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
-#' # Data Preparation
-#' ### First we read in our study design file and construct a design matrix.
-#' ### These objects contain information about our samples, 
-#' ### our variable of interest, and our model specification.
+#' # Overview
+#' This report contains a differential gene expression analysis of bulk RNA-seq 
+#' data, as well as the R code used to perform that analysis. Upstream 
+#' downloading, aligning, and QC of the bulk RNA-seq data was performed using 
+#' kallisto and other command line tools. The assembly and execution of those 
+#' commands was handled by Python scripts. All of this code is available at 
+#' https://github.com/awmundy/bio .  
+#' 
+#' This codebase is generalized to act as an analysis pipeline for a wide range 
+#' of bulk RNA-Seq experiments. Small changes to configuration files and the 
+#' construction of a simple study design file are all that is needed to produce 
+#' a similar analysis on different data.
+#' 
+#' # Replication Description
+cat(output_description)
+
+#' # Data Flow
+#' 
+#' The first section of the data flow is handled by Python scripts which store 
+#' the run configuration details and construct/execute the cli commands.  
+#' 
+#' * The process begins with downloading the reference transcriptome (fasta) 
+#' and sequence data (fastq) from the experiment  
+#' * Kallisto is then used to psuedoallign the fastq files and produce 
+#' transcript level abundances  
+#' * Various QC tools are then used to produce QC reports for review  
+#' 
+#' The remainder of the data flow is handled by R scripts.  
+#' 
+#' * Each major step is described in this report next to the relevant R 
+#' functions  
+#' * More detailed information on the mechanics and motivation behind each of 
+#' these steps is provided at 
+#' https://github.com/awmundy/bio/blob/main/documentation/data_transforms.md  
+#' * The final step is the generation of this html report using knitr 
+
+# error=FALSE is required but there is not actually an error
+include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
+                 dpi = 110, error = FALSE)
+
+#' # Data Preparation  
+#' 
+#' * The study design file is read in  
+#' * A design matrix is constructed according to the specifications in a 
+#' configuration file  
+#' * The study design and design matrix contain information about our samples, 
+#' our variable of interest, and our model specification
+#' 
+#' ## Study Design
 study_design <- get_study_design_df(study_design_path)
-knitr::kable(study_design)
+simple_datatable(study_design)
+
 sample_labels <- study_design$sample_label
 abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
-knitr::kable(design_matrix)
+
+#' ## Design Matrix
+simple_datatable(design_matrix)
 abundance_paths <- study_design$abundance_path
 
+#' # Aggregating Counts to Gene Level  
+#' 
+#' * A transcript to gene mapping is downloaded from Ensembl   
+#' * Transcript level abundances are then read in and aggregated to gene level 
+#' using this mapping  
+#' A few records of these tables are printed below 
 
 # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
 
+#' ### Transcript to Gene Mapping
+simple_datatable(head(tx_to_gene_df))
+
 gene_counts <- get_gene_counts(abundance_paths, sample_labels, tx_to_gene_df)
 
+#' ### Gene Counts
+simple_datatable(head(gene_counts), sample_labels)
+
+
+#' # Filtering, Normalizing, Converting to LogCPM  
+#' Various functions in the edgeR library are then used to further prepare the 
+#' counts.  
+#' 
+#' * The counts are stored in a digital gene expression list object  
+#' * These counts are then filtered according to the minimum counts per million 
+#' thresholds specified in the configuration file  
+#' * Normalization factors are produced for each sample using Trimmed Mean of 
+#' M values (TMM) that account for differences in library sizes and for 
+#' "crowding out" by highly expressed genes  
+#' * The counts are then converted to log2 counts per million, allowing counts 
+#' from different samples to be compared  
 
 # Normalization, Filtering, Logging, Converting to Counts per Million
 c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
   get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
                          min_samples_with_min_cpm)
 
+#' ## Filtered, Log2CPM counts
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
                                       long = FALSE)
-
-#' # Flowchart
-# error=FALSE is required be there is not actually an error
-include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
-                 dpi = 110, error = FALSE)
+simple_datatable(head(log_cpm_filt_norm), sample_labels)
 
 
-#' # Differential Gene Expression
+#' # Differential Gene Expression  
+#' 
+#' The limma library is then used to identify differential gene expression.  
+#' 
+#' * Weights are produced for each sample/gene combination  
+#'   +  These weights are used to handle the heteroskedasticity present in gene 
+#' log counts (the variance is typically lower for higher log count genes)   
+#'   + We don't want heteroskedasticity in our data because we want to be able to identify 
+#' differential expression equally well for both high and low count genes.  
+#' * A linear model is then fit at the gene level to the weighted counts  
+#'   + The model variables are defined in the design matrix  
+#'   + The coefficients for this model are differenced according to the 
+#'   design matrix  
+#'   + i.e. if looking for the change in gene expression of the 
+#'   experimental group with respect to the control group, the control 
+#'   coefficient would be subtracted from the experimental coefficient   
+#' * An empirical bayes calculation for each gene is then performed, testing 
+#' for whether there was a significant logfold change in expression  
+#' * P values from the previous step are corrected for multiple 
+#' testing and the significantly differentially expressed genes are identified  
+
 # Build Mean/Variance Weights Across Samples for Each Gene 
 mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
                                                    design_matrix)
@@ -1111,13 +1199,13 @@ all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        min_lfc = 0,
                                        max_p_val = 1.0)
 
-# Differential Gene Expression Volcano Plots
+#' ## Differential Gene Expression Volcano Plots
 plot_dge_volcano(sig_dge,
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path,
                  write_output)
 
-# Differential Gene Expression Table
+#' ## Differential Gene Expression Table
 # merge gene level df with sample cols with gene level df with significance info
 sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
 all_dge <- merge(all_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
@@ -1128,16 +1216,32 @@ write_csv(sig_dge, file=dge_csv_out_path)
 write_csv(all_dge, file=all_dge_csv_out_path)
 plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 
-#' # Gene Set Enrichment Analysis (GSEA) for Custom Gene Sets
+#' # Gene Set Enrichment Analysis  
+#' 
+#' Next, Gene Set Enrichment Analysis (GSEA) is performed. This identifies 
+#' biologically relevant sets of genes that are differentally expressed. Even 
+#' when few or none of the genes in a set are individually significantly 
+#' differentially expressed, the set as a whole can nevertheless be found to be 
+#' if the genes generally exhibit differential expression in the same direction.   
+#' 
+#' * First, custom gene sets that have been hand curated are analyzed   
+#' * Then, gene sets identified by MSIG have the same analysis performed   
+#' * To reduce clutter, only the most significantly up and downregulated 
+#' gene sets are plotted, although all are included in the table  
+#' * Heatmaps are then produced providing more detail about the differential 
+#' expression characteristics of each gene in each gene set  
+#' * Gene sets defined by the GO Consortium are then plotted according to 
+#' their significance and their GO defined aspect
+#' 
+#' ## GSEA for Custom Gene Sets 
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
 
-#' # GSEA for MSIG Gene Sets
+#' ## GSEA for MSIG Gene Sets
 gene_sets_msig <- get_msig_gene_sets('Mus musculus')
-build_and_plot_fgsea(gene_sets_msig, all_dge, 
-                     'GSEA for Most Significant Highest/Lowest NES MSIGDB Gene Sets')
+build_and_plot_fgsea(gene_sets_msig, all_dge, 'GSEA for MSIGDB Gene Sets')
 
-#' # Gene Cluster Differential Expression Heatmap for Custom Gene Sets
+#' ## Gene Cluster Differential Expression Heatmap for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   gene_set <- 
@@ -1145,10 +1249,10 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
 }
 
-#' # Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
+#' ## Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
 
-#' # Gene Ontology GOST plots
+#' ## Gene Ontology GOST plots
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
@@ -1160,23 +1264,40 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
-#' # QC
-# Principal Component Analysis
+#' # Quality Control  
+#' 
+#' To assist with QC, a few other plots are generated  
+#' 
+#' * Principal Component Analysis and cluster dendograms can be useful for 
+#' identifying if the differences between the cohorts in the experiment are 
+#' high   
+#' * The filtering/normalization violin plots help identify imbalanced samples, 
+#' as well as identify the impact of filtering and normalization  
+#' * The shape of the mean/variance trend line can be informative for determining 
+#' if more low count genes should be filtered out 
+#' 
+#' ## Principal Component Analysis  
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
+
+#' ## Sample Cluster Dendogram
+plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
+                              sample_cluster_out_path, write_output)
+
 # sleep to stop knitr bug where plots repeat
 Sys.sleep(5)
+
+#' ## Filtering and Normalization Impact
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
                                          dge_list_filt_norm,
                                          control_label,
                                          filtering_and_normalizing_impact_out_path, 
                                          write_output)
 
-plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
-                              sample_cluster_out_path, write_output)
+#' ## Mean/Variance Distribution and Trend Line
 plot_mean_variance_distribution(mean_variance_weights, 
                                 mean_variance_plot_out_path,
                                 write_output)
