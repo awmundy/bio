@@ -1,8 +1,8 @@
 ### Kallisto Index
 - Description:
-  - Constructs an kallisto index file based on a reference cDNA genome
+  - Constructs a kallisto index file based on a reference cDNA genome
 - Inputs:
-  - Referece genome fasta file
+  - Reference genome fasta file
 Purpose:
   - Speeds up downstream kallisto abundance calculations
 
