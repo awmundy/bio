@@ -240,3 +240,19 @@ plot_gsea_datatable <- function(gsea_df, write_output,
 #   plot_gsea_bubble(gsea_df_filtered, write_output, gsea_bubble_plot_path)
 # }
 
+#' ---
+#' date: "<center> _`r Sys.Date()`_ <center>"
+#' output:
+#'   html_document:
+#'     code_folding: hide
+#'     df_print: paged
+#'     theme: yeti
+#'     highlight: tango
+#'     toc: yes
+#'     number_sections: true
+#' ---
+#' ```{r setup, include=FALSE}
+#' knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+#' ```
+
+
