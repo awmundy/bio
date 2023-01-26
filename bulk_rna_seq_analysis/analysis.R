@@ -2,8 +2,9 @@
 #' author: "Andrew Mundy"
 #' date: ""
 #' output: 
-#'   rmdformats::robobook:
+#'   rmdformats::html_clean:
 #'     code_folding: hide
+#'     thumbnails: false
 #' ---
 #' ```{r setup, include=FALSE}
 #' knitr::opts_chunk$set(warning=FALSE, message=FALSE, results='asis')
@@ -497,7 +498,7 @@ build_datatable <- function(data, caption_text) {
       searchHighlight = TRUE,
       pageLength = 10,
       orderMulti = TRUE,
-      scrollX = '400px',
+      scrollX = TRUE,
       lengthMenu = c("10", "25", "50", "100")
     ))
   
@@ -1118,6 +1119,7 @@ abundance_paths <- study_design$abundance_path
 #' * A transcript to gene mapping is downloaded from Ensembl   
 #' * Transcript level abundances are then read in and aggregated to gene level 
 #' using this mapping  
+#' 
 #' A few records of these tables are printed below 
 
 # Read abundances and build digital gene expression lists
