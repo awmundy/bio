@@ -1,4 +1,6 @@
+# Location of reference genomes, study design, and downstream R outputs
 project_dir = '/media/awmundy/Windows/bio/'
+# Flexibility offered to store RNA txs on separate drive for space reasons
 rna_txs_root_dir = '/media/awmundy/TOSHIBA EXT/'
 
 cfgs = {'senescence_skeletal_muscle_myofiber':
