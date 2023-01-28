@@ -296,7 +296,7 @@ plot_sample_cluster_dendogram <- function(tbl, sample_labels, sample_cluster_out
 	# build dendogram and write
 	if (write_output) {
 	  pdf(sample_cluster_out_path)
-	  plot(clusters, labels=sample_labels)
+	  plot(clusters, labels=sample_labels, xlab='')
 	  dev.off()
 	} else {
 	  plot(clusters, labels=sample_labels)
