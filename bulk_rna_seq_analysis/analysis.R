@@ -10,6 +10,54 @@
 #' knitr::opts_chunk$set(warning=FALSE, message=FALSE, results='asis')
 #' ```
 
+#' # Replication Description
+cat(output_description)
+
+#' # Project Overview
+#' 
+#' This report is the final piece of a bulk RNA-seq differential gene expression 
+#' pipeline. The entire pipeline can be run with only two scripts, one in R and 
+#' one in Python. If the RNA-seq data is stored in the GEO database, an optional 
+#' third script can be run first to download those files and convert them to 
+#' fastq.  
+#' 
+#' This codebase is generalized to act as an analysis pipeline for a wide range 
+#' of bulk RNA-Seq experiments. Small changes to configuration files and the 
+#' construction of a simple study design file are all that is needed to produce 
+#' a similar report using different data. 
+#' 
+#' A multiqc report displaying QC metrics for the raw RNA-seq data and Kallisto 
+#' allignment is available at https://awmundy.github.io/bio/multiqc_report.html  
+#' 
+#' All code for this project is available at https://github.com/awmundy/bio 
+
+
+#' # Pipeline Data Flow
+#' 
+#' * The first section of the pipeline is handled by Python scripts which store 
+#' the run configuration details and construct/execute the CLI commands   
+#' + The process begins with downloading the reference transcriptome (fasta) 
+#' and sequence data (fastq) from the GEO database  
+#' + Kallisto is then used to psuedoallign the fastq files and produce 
+#' transcript level abundances  
+#' + Various QC tools are then used to produce QC reports for review  
+#' 
+#' * The remainder of the data flow is handled by the R script contained within 
+#' this report  
+#' + The RNA-seq data is imported and normalized
+#' + Significantly differentially expressed genes are identified
+#' + Gene set enrichment analysis is performed
+#' + QC figures are produced
+#' + A separate R script is run that executes this R script and composes this 
+#' report using knitr  
+#' 
+#' A data flow diagram is provided below. Further details about major points of 
+#' the analysis are included throughout this report next to their corresponding 
+#' function calls.
+
+include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
+                 dpi = 110, error = FALSE)
+
 #' # Libraries
 suppressPackageStartupMessages({
   library(tidyverse)
@@ -1053,46 +1101,6 @@ gsea_line_plot_path <-
 gsea_bubble_plot_path <- 
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
-#' # Overview
-#' This report contains a differential gene expression analysis of bulk RNA-seq 
-#' data, as well as the R code used to perform that analysis. Upstream 
-#' downloading, aligning, and QC of the bulk RNA-seq data was performed using 
-#' kallisto and other command line tools. The assembly and execution of those 
-#' commands was handled by Python scripts. All of this code is available at 
-#' https://github.com/awmundy/bio .  
-#' 
-#' This codebase is generalized to act as an analysis pipeline for a wide range 
-#' of bulk RNA-Seq experiments. Small changes to configuration files and the 
-#' construction of a simple study design file are all that is needed to produce 
-#' a similar analysis on different data.
-#' 
-#' # Replication Description
-cat(output_description)
-
-#' # Data Flow
-#' 
-#' The first section of the data flow is handled by Python scripts which store 
-#' the run configuration details and construct/execute the cli commands.  
-#' 
-#' * The process begins with downloading the reference transcriptome (fasta) 
-#' and sequence data (fastq) from the experiment  
-#' * Kallisto is then used to psuedoallign the fastq files and produce 
-#' transcript level abundances  
-#' * Various QC tools are then used to produce QC reports for review  
-#' 
-#' The remainder of the data flow is handled by R scripts.  
-#' 
-#' * Each major step is described in this report next to the relevant R 
-#' functions  
-#' * More detailed information on the mechanics and motivation behind each of 
-#' these steps is provided at 
-#' https://github.com/awmundy/bio/blob/main/documentation/data_transforms.md  
-#' * The final step is the generation of this html report using knitr 
-
-# error=FALSE is required but there is not actually an error
-include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
-                 dpi = 110, error = FALSE)
-
 #' # Data Preparation  
 #' 
 #' * The study design file is read in  
@@ -1171,9 +1179,10 @@ simple_datatable(head(log_cpm_filt_norm), sample_labels)
 #'   + The model variables are defined in the design matrix  
 #'   + The coefficients for this model are differenced according to the 
 #'   design matrix  
-#'   + i.e. if looking for the change in gene expression of the 
-#'   experimental group with respect to the control group, the control 
-#'   coefficient would be subtracted from the experimental coefficient   
+#'   + Example: if the design matrix specifies that we are looking for the 
+#'   change in gene expression of the experimental group with respect to the 
+#'   control group, the control coefficient would be subtracted from the 
+#'   experimental coefficient   
 #' * An empirical bayes calculation for each gene is then performed, testing 
 #' for whether there was a significant logfold change in expression  
 #' * P values from the previous step are corrected for multiple 
@@ -1226,14 +1235,16 @@ plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 #' differentially expressed, the set as a whole can nevertheless be found to be 
 #' if the genes generally exhibit differential expression in the same direction.   
 #' 
-#' * First, custom gene sets that have been hand curated are analyzed   
-#' * Then, gene sets identified by MSIG have the same analysis performed   
+#' * GSEA is performed on custom gene sets defined in a csv file
+#' + GSEA plots are produced and key metrics are presented in a table
+#' * GSEA is performed on MSIG gene sets retrieved from the MSIG database
+#' * Like with the custom gene sets, plots and a table are produced  
 #' * To reduce clutter, only the most significantly up and downregulated 
 #' gene sets are plotted, although all are included in the table  
 #' * Heatmaps are then produced providing more detail about the differential 
 #' expression characteristics of each gene in each gene set  
-#' * Gene sets defined by the GO Consortium are then plotted according to 
-#' their significance and their GO defined aspect
+#' * Gene sets defined by the GO Consortium are then displayed according to 
+#' their significance and their GO defined aspect in a manhattan plot
 #' 
 #' ## GSEA for Custom Gene Sets 
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
@@ -1254,7 +1265,7 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
 #' ## Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
 
-#' ## Gene Ontology GOST plots
+#' ## Gene Ontology Manhattan Plots
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
