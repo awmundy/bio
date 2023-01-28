@@ -11,12 +11,35 @@
 #' ```
 
 #' # Replication Description
-cat(output_description)
-
+#' This report contains a replication of the differential gene expression analysis
+#' comparing young vs old mouse liver cells in the following Duan et al paper:
+#' https://www.nature.com/articles/s43587-022-00348-z  
+#' 
+#' In addition to replicating the heatmaps and GSEA plots for three of the gene sets 
+#' in the paper, I have extended their analysis in several ways.  
+#' 
+#' * I perform additional GSEA for MSIG gene sets in order to evaluate 
+#' if there are other pathways that are differentially expressed  
+#'   + Manhattan plots of Gene Ontology gene sets are also included for the same 
+#' reason   
+#' * I perform and present various QC steps in order to increase 
+#' confidence in the analysis  
+#'   + A multiqc report, available at https://awmundy.github.io/bio/multiqc_report.html  
+#'   + PCA plots, a sample clustering plot, and a gene mean/variance plot, 
+#' available at the end of this report  
+#' * I perform this analysis in a reproducible, inspectable, generalized manner 
+#' through code, rather than through GUI tools (GSEA, Excel, etc)  
+#'   + Anyone with access to the repository containing this code should be able to 
+#' reproduce this analysis  
+#'   + Every step is inspectable due to it being recorded in code  
+#'   + The code has been generalized such that related analyses can be run on 
+#' different data but with the exact same steps performed, ensuring 
+#' comparability of results  
+#' 
 #' # Project Overview
 #' 
 #' This report is the final piece of a bulk RNA-seq differential gene expression 
-#' pipeline. The entire pipeline can be run with only two scripts, one in R and 
+#' pipeline. The entire pipeline can be run with only two scripts- one in R and 
 #' one in Python. If the RNA-seq data is stored in the GEO database, an optional 
 #' third script can be run first to download those files and convert them to 
 #' fastq.  
@@ -24,37 +47,38 @@ cat(output_description)
 #' This codebase is generalized to act as an analysis pipeline for a wide range 
 #' of bulk RNA-Seq experiments. Small changes to configuration files and the 
 #' construction of a simple study design file are all that is needed to produce 
-#' a similar report using different data. 
+#' a similar report using different data.  
 #' 
 #' A multiqc report displaying QC metrics for the raw RNA-seq data and Kallisto 
 #' allignment is available at https://awmundy.github.io/bio/multiqc_report.html  
 #' 
-#' All code for this project is available at https://github.com/awmundy/bio 
-
-
+#' All code for this project is available at https://github.com/awmundy/bio  
+#' 
 #' # Pipeline Data Flow
 #' 
 #' * The first section of the pipeline is handled by Python scripts which store 
 #' the run configuration details and construct/execute the CLI commands   
-#' + The process begins with downloading the reference transcriptome (fasta) 
-#' and sequence data (fastq) from the GEO database  
-#' + Kallisto is then used to psuedoallign the fastq files and produce 
-#' transcript level abundances  
-#' + Various QC tools are then used to produce QC reports for review  
+#'   + The process begins with downloading the the RNA-seq data from the GEO 
+#' database  
+#'   + Kallisto is then used to psuedoallign the fastq files to a reference index 
+#' and produce transcript level abundances  
+#'   + Various QC tools are then used to produce QC reports for review  
 #' 
-#' * The remainder of the data flow is handled by the R script contained within 
+#' * The remainder of the analysis is handled by the R script contained within 
 #' this report  
-#' + The RNA-seq data is imported and normalized
-#' + Significantly differentially expressed genes are identified
-#' + Gene set enrichment analysis is performed
-#' + QC figures are produced
-#' + A separate R script is run that executes this R script and composes this 
+#'   + The RNA-seq data is imported and normalized
+#'   + Significantly differentially expressed genes are identified
+#'   + Gene set enrichment analysis is performed
+#'   + QC figures are produced
+#'   + A separate R script is run that executes this R script and composes this 
 #' report using knitr  
 #' 
 #' A data flow diagram is provided below. Further details about major points of 
 #' the analysis are included throughout this report next to their corresponding 
 #' function calls.
-
+suppressPackageStartupMessages({
+  library(knitr)
+})
 include_graphics(paste0(getwd(), "/documentation/pipeline_flowchart.png"), 
                  dpi = 110, error = FALSE)
 
@@ -89,7 +113,6 @@ suppressPackageStartupMessages({
   library(fgsea)
   library(ggpubr)
   library(cowplot)
-  library(knitr)
 }) 
 
 #' # Functions and Output Paths
@@ -296,10 +319,10 @@ plot_sample_cluster_dendogram <- function(tbl, sample_labels, sample_cluster_out
 	# build dendogram and write
 	if (write_output) {
 	  pdf(sample_cluster_out_path)
-	  plot(clusters, labels=sample_labels, xlab='')
+	  plot(clusters, labels=sample_labels, xlab="", sub="")
 	  dev.off()
 	} else {
-	  plot(clusters, labels=sample_labels)
+	  plot(clusters, labels=sample_labels, xlab="", sub="")
 	}	
 
 }
@@ -1235,8 +1258,8 @@ plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 #' differentially expressed, the set as a whole can nevertheless be found to be 
 #' if the genes generally exhibit differential expression in the same direction.   
 #' 
-#' * GSEA is performed on custom gene sets defined in a csv file
-#' + GSEA plots are produced and key metrics are presented in a table
+#' * GSEA is performed on custom gene sets defined in a csv file  
+#'   + GSEA plots are produced and key metrics are presented in a table
 #' * GSEA is performed on MSIG gene sets retrieved from the MSIG database
 #' * Like with the custom gene sets, plots and a table are produced  
 #' * To reduce clutter, only the most significantly up and downregulated 

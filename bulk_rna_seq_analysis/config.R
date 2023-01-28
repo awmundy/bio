@@ -82,27 +82,10 @@ cfgs <-
                       experimental_label = 'old',
                       output_name = 'age_related_steatohepatitis_young_vs_old_comparison.html',
                       output_title = 'Differential Gene Expression Replication of Duan et al Steatohepatitis Aging',
-                      output_description = paste0('This report contains a replication of the differential gene expression analysis ',
-                                                  'comparing young vs old mouse liver cells in the following Duan et al paper: ',
-                                                  'https://www.nature.com/articles/s43587-022-00348-z .',
-                                                  '\n',
-                                                  'In addition to replicating the heatmaps and GSEA plots for three of the gene ',
-                                                  'sets in the paper, I have also extended their analysis in several ways. First, ',
-                                                  'I perform GSEA for MSIG gene sets, in order to evaluate if there are ',
-                                                  'other pathways that are differentially expressed. Manhattan plots of Gene ',
-                                                  'Ontology gene sets are also included for the same reason. Second, I perform and ',
-                                                  'present various QC steps in order to increase confidence in the analysis. These ',
-                                                  'include a multiqc report (available at https://awmundy.github.io/bio/multiqc_report.html) ',
-                                                  'PCA plots, a sample clustering plot, and a gene mean/variance plot. ',
-                                                  '\n',
-                                                  'Finally, the structure of the analysis itself is an extension. While the original paper used a ',
-                                                  'mixture of GUI tools (GSEA, excel, etc) to perform the analysis, my analysis is' ,
-                                                  'done entirely with code. This makes each analytical step visible and makes the ',
-                                                  'analysis reproducible. Because I have generalized the code, another benefit is that ',
-                                                  'similary analyses using different data would be very easy to perform.'),
                       output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/'
                     )
        )))
+
 
 # run <- 'ac_thymus'
 # run_subtype <- c('age')
@@ -127,7 +110,6 @@ min_samples_with_min_cpm <- cfgs[[run]]$min_samples_with_min_cpm
 output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
 output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title
-output_description <- cfgs[[run]]$run_subtype[[run_subtype]]$output_description
 
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
