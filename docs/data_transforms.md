@@ -108,7 +108,7 @@ Purpose:
     - Heteroskedasticity makes comparing highly expressed genes across samples challenging
     - Log transforming the counts mitigates this, although the resulting dataset is
       slightly heteroskedastic towards lowly expressed genes
-  - In conjuction with the TMM values from the previous normalization, CPM allows for comparisons between samples by controlling for different amounts of reads 
+  - In conjunction with the TMM values from the previous normalization, CPM allows for comparisons between samples by controlling for different amounts of reads 
     in each sample
 
 
@@ -221,7 +221,6 @@ Purpose:
     ordinal data where the distance between some adjacent values (low vs medium, medium vs high) may not
     be the same
   - Assumes normal distribution
-  
 
 ### Functional Enrichment analysis
 - Used to determine if certain sets of genes corresponding to some function are differentially 
