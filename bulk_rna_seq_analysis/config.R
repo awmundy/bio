@@ -66,8 +66,7 @@ cfgs <-
            abundance_root_dir =
              '/media/awmundy/TOSHIBA EXT/age_related_steatohepatitis/rna_txs/fastq_folders/',
            sample_dimensions = c('cohort'),
-           custom_gene_sets_path = 
-             '/media/awmundy/Windows/bio/age_related_steatohepatitis/custom_gene_sets/custom_gene_sets.csv',
+           custom_gene_sets_path = 'https://raw.githubusercontent.com/awmundy/bio/master/custom_gene_sets/custom_gene_sets_duan_et_al.csv',
            # cpm chosen to be about 10-15 reads per million, based on guidance here: 
            # https://f1000research.com/articles/5-1438
            min_cpm = .5,
