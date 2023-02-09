@@ -24,14 +24,14 @@
 #' * I perform and present various QC steps in order to increase 
 #' confidence in the analysis  
 #'   + A separate [multiqc report](https://awmundy.github.io/bio/multiqc_report.html) 
-#'   displaying QC metrics for the raw RNA-seq data and Kallisto pseudoallignment  
+#'   displays QC metrics for the raw RNA-Seq data and Kallisto pseudoallignment  
 #'   + PCA plots, a sample clustering plot, and a gene mean/variance plot, 
 #' available at the end of this report  
 #' * I perform this analysis in a reproducible, inspectable, generalized manner 
 #' through code, rather than through GUI tools (GSEA desktop application, Excel, 
 #' etc)  
-#'   + Anyone with access to the repository containing this code should be able to 
-#' reproduce this analysis  
+#'   + Anyone with access to the repository containing this code can reproduce 
+#'   this analysis  
 #'   + Every step is inspectable  
 #'   + The code has been generalized such that related analyses can be run on 
 #' different data but with the exact same steps performed, ensuring 
@@ -39,9 +39,9 @@
 #' 
 #' # Project Overview
 #' 
-#' * This report is the final piece of a bulk RNA-seq differential gene expression 
-#' pipeline. The entire pipeline requires only two scripts- one in R and 
-#' one in Python. If the RNA-seq data is stored in the GEO database, an optional 
+#' * This report is the final piece of a bulk RNA-Seq differential gene expression 
+#' pipeline. The entire pipeline is run with only one R script and one Python 
+#' script. If the RNA-Seq data is stored in the GEO database, an optional 
 #' third script can be run first to download those files and convert them to 
 #' fastq.  
 #' 
@@ -58,7 +58,7 @@
 #' 
 #' * The first section of the pipeline is handled by Python scripts which store 
 #' the run configuration details and assemble/execute the CLI commands   
-#'   + The process begins with downloading the RNA-seq data from the GEO 
+#'   + The process begins with downloading the RNA-Seq data from the GEO 
 #' database  
 #'   + Kallisto is then used to psuedoallign the fastq files to a reference index 
 #' and produce transcript level abundances  
@@ -66,8 +66,8 @@
 #' 
 #' * The remainder of the analysis is handled by the R script contained within 
 #' this report. A separate R script executes the analysis script and composes 
-#' this report using knitr 
-#'   + The RNA-seq data is imported and normalized
+#' this report using knitr. The major steps are: 
+#'   + The RNA-Seq data is imported and normalized
 #'   + Significantly differentially expressed genes are identified
 #'   + Gene set enrichment analysis is performed
 #'   + QC figures are produced
@@ -1161,7 +1161,7 @@ simple_datatable(head(log_cpm_filt_norm), sample_labels)
 #'   +  These weights are used to handle the heteroskedasticity present in gene 
 #' log counts (the variance is typically lower for higher log count genes)   
 #'   + We don't want heteroskedasticity in our data because we want to be able to identify 
-#' differential expression equally well for both high and low count genes.  
+#' differential expression equally well for both high and low count genes  
 #' * A linear model is then fit at the gene level to the weighted counts  
 #'   + The model variables are defined in the design matrix  
 #'   + The coefficients for this model are differenced according to the 
@@ -1170,7 +1170,7 @@ simple_datatable(head(log_cpm_filt_norm), sample_labels)
 #'   change in gene expression of the experimental group with respect to the 
 #'   control group, the control coefficient would be subtracted from the 
 #'   experimental coefficient   
-#' * An empirical bayes calculation for each gene is then performed, testing 
+#' * An Empirical Bayes calculation for each gene is then performed, testing 
 #' for whether there was a significant logfold change in expression  
 #' * P values from the previous step are corrected for multiple 
 #' testing and the significantly differentially expressed genes are identified  
@@ -1222,13 +1222,13 @@ plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 #' * Even when few or none of the genes in a set are individually significantly 
 #' differentially expressed, the set as a whole can nevertheless be found to be 
 #' significantly differentially expressed 
-#' * This is true if the genes exhibit differential expression generally in the 
-#' same direction, even at non-significant levels
+#'   + This is true if the genes exhibit differential expression generally in the 
+#'   same direction, even at non-significant levels
 #' * GSEA is performed on custom gene sets defined in a csv file, and then on 
 #'   MSIG gene sets retrieved from the MSIG database
 #'   + GSEA plots are produced and key metrics are presented in a table
-#'   + To reduce clutter, only the most significantly up and downregulated 
-#' gene sets are plotted, although all are included in the table  
+#'   + To reduce clutter, only the most significantly upregulated and downregulated 
+#'   gene sets are plotted, although all are included in the table  
 #' * Heatmaps are then produced providing more detail about the differential 
 #' expression characteristics of each gene in each gene set  
 #' * Gene sets defined by the GO Consortium are then displayed according to 
@@ -1272,7 +1272,7 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
 #' * Principal Component Analysis and cluster dendograms can be useful for 
 #' identifying if the differences between the cohorts in the experiment are 
 #' high   
-#' * The filtering/normalization violin plots help identify imbalanced samples, 
+#' * The filtering and normalization violin plots help identify imbalanced samples, 
 #' as well as identify the impact of filtering and normalization  
 #' * The shape of the mean/variance trend line can be informative for determining 
 #' if more low count genes should be filtered out 
