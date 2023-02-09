@@ -11,12 +11,11 @@
 #' ```
 
 #' # Replication Description
-#' This report contains a replication of the differential gene expression analysis
-#' comparing young vs old mouse liver cells in the following Duan et al paper:
-#' https://www.nature.com/articles/s43587-022-00348-z  
+#' This is a replication of the differential gene expression analysis
+#' comparing young and old mouse liver cells for three gene sets in the Duan et 
+#' al paper available [here](https://www.nature.com/articles/s43587-022-00348-z). 
 #' 
-#' In addition to replicating the heatmaps and GSEA plots for three of the gene sets 
-#' in the paper, I have extended their analysis in several ways.  
+#' I have also extended their analysis in several ways:  
 #' 
 #' * I perform additional GSEA for MSIG gene sets in order to evaluate 
 #' if there are other pathways that are differentially expressed  
@@ -24,58 +23,57 @@
 #' reason   
 #' * I perform and present various QC steps in order to increase 
 #' confidence in the analysis  
-#'   + A multiqc report, available at https://awmundy.github.io/bio/multiqc_report.html  
+#'   + A separate [multiqc report](https://awmundy.github.io/bio/multiqc_report.html) 
+#'   displaying QC metrics for the raw RNA-seq data and Kallisto pseudoallignment  
 #'   + PCA plots, a sample clustering plot, and a gene mean/variance plot, 
 #' available at the end of this report  
 #' * I perform this analysis in a reproducible, inspectable, generalized manner 
-#' through code, rather than through GUI tools (GSEA, Excel, etc)  
+#' through code, rather than through GUI tools (GSEA desktop application, Excel, 
+#' etc)  
 #'   + Anyone with access to the repository containing this code should be able to 
 #' reproduce this analysis  
-#'   + Every step is inspectable due to it being recorded in code  
+#'   + Every step is inspectable  
 #'   + The code has been generalized such that related analyses can be run on 
 #' different data but with the exact same steps performed, ensuring 
-#' comparability of results  
+#' comparability of all results  
 #' 
 #' # Project Overview
 #' 
-#' This report is the final piece of a bulk RNA-seq differential gene expression 
-#' pipeline. The entire pipeline can be run with only two scripts- one in R and 
+#' * This report is the final piece of a bulk RNA-seq differential gene expression 
+#' pipeline. The entire pipeline requires only two scripts- one in R and 
 #' one in Python. If the RNA-seq data is stored in the GEO database, an optional 
 #' third script can be run first to download those files and convert them to 
 #' fastq.  
 #' 
-#' This codebase is generalized to act as an analysis pipeline for a wide range 
-#' of bulk RNA-Seq experiments. Small changes to configuration files and the 
-#' construction of a simple study design file are all that is needed to produce 
-#' a similar report using different data.  
+#' * This codebase is generalized to act as an analysis pipeline for a wide range 
+#' of bulk RNA-Seq experiments. Small changes to configuration files, the 
+#' construction of a simple study design file, and (optionally) a custom gene 
+#' sets csv are all that is needed to produce a similar report using different data.  
 #' 
-#' A multiqc report displaying QC metrics for the raw RNA-seq data and Kallisto 
-#' allignment is available at https://awmundy.github.io/bio/multiqc_report.html  
+#' * All code for this project is available at https://github.com/awmundy/bio  
 #' 
-#' All code for this project is available at https://github.com/awmundy/bio  
+#' # Pipeline Data Flow Diagram
 #' 
-#' # Pipeline Data Flow
+#' A data flow diagram is provided below. 
 #' 
 #' * The first section of the pipeline is handled by Python scripts which store 
-#' the run configuration details and construct/execute the CLI commands   
-#'   + The process begins with downloading the the RNA-seq data from the GEO 
+#' the run configuration details and assemble/execute the CLI commands   
+#'   + The process begins with downloading the RNA-seq data from the GEO 
 #' database  
 #'   + Kallisto is then used to psuedoallign the fastq files to a reference index 
 #' and produce transcript level abundances  
 #'   + Various QC tools are then used to produce QC reports for review  
 #' 
 #' * The remainder of the analysis is handled by the R script contained within 
-#' this report  
+#' this report. A separate R script executes the analysis script and composes 
+#' this report using knitr 
 #'   + The RNA-seq data is imported and normalized
 #'   + Significantly differentially expressed genes are identified
 #'   + Gene set enrichment analysis is performed
 #'   + QC figures are produced
-#'   + A separate R script is run that executes this R script and composes this 
-#' report using knitr  
 #' 
-#' A data flow diagram is provided below. Further details about major points of 
-#' the analysis are included throughout this report next to their corresponding 
-#' function calls.
+#' * Further details about major points of the analysis are included throughout 
+#' this report next to the corresponding function calls.
 suppressPackageStartupMessages({
   library(knitr)
 })
@@ -145,13 +143,6 @@ get_transcript_to_gene_df <- function(annotation_db){
   return(tx)
 }
 
-add_row_descriptive_stats <- function(df, col_subset) {
-  df$sd <- rowSds(as.matrix(abund[, col_subset]))
-  df$mean <- rowMeans(as.matrix(abund[, col_subset]))
-  df$median <- rowMedians(as.matrix(abund[, col_subset]))
-  return(df)
-}
-
 convert_tx_gene_mtx_to_tibble <- function(mtx, sample_labels) {
   # add column names that are the names of the samples
   stopif(is.null(sample_labels))
@@ -210,8 +201,7 @@ build_log_cpm_plot <- function(cpm_df, subtitle) {
                  show.legend = FALSE) +
     labs(y="log2 expression", x = "sample",
          title="Log2 Counts per Million (CPM)",
-         subtitle=subtitle,
-         caption=paste0("produced on ", Sys.time())) +
+         subtitle=subtitle) +
     theme_bw()
   return(plt)
 }
@@ -559,18 +549,20 @@ plot_dge_volcano <- function(dge,
 build_datatable <- function(data, caption_text) {
   dtbl <- datatable(
     data,
-    extensions = c('KeyTable', "FixedHeader"),
+    extensions = c('KeyTable', "FixedHeader", "Buttons"),
     caption = caption_text,
     rownames = FALSE,
     selection = 'multiple',
     filter = 'top',
     options = list(
+      dom = 'Bfrtip',
       keys = TRUE,
       searchHighlight = TRUE,
-      pageLength = 10,
+      pageLength = 5,
       orderMulti = TRUE,
       scrollX = TRUE,
-      lengthMenu = c("10", "25", "50", "100")
+      lengthMenu = c("5", "10", "25", "50", "100"),
+      buttons = c('csv')
     ))
   
   return(dtbl)
@@ -956,35 +948,6 @@ get_custom_gene_sets <- function(custom_gene_sets_path) {
   return(gene_sets_custom)
 }
 
-get_gene_sets <- function(custom_gene_sets_path) {
-  # get msig gene sets
-  gene_sets <- get_msig_gene_sets('Mus musculus')
-
-  # get go gene sets, concat to msig gene sets
-  go_bp_gene_sets <- msigdbr(species = "Mus musculus", category = "C5",
-                             subcategory = "BP")
-  go_bp_gene_sets <- dplyr::select(go_bp_gene_sets, "gs_name", "gene_symbol")
-  gene_sets <- rbind(gene_sets, go_bp_gene_sets)
-
-  # if there are custom gene sets, attach them too
-  if (!is.null(custom_gene_sets_path)) {
-    gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
-    gene_sets <- rbind(gene_sets, gene_sets_custom)
-  }
-  
-  return(gene_sets)  
-}
-
-filter_gsea_df_to_most_sig_pos_and_neg_enriched_pathways <- function(gsea_df) {
-  gsea_df_down <- dplyr::filter(gsea_df, NES<0)
-  gsea_df_down <- head(gsea_df_down[order(gsea_df_down$p.adjust),], 10)
-  gsea_df_up <- dplyr::filter(gsea_df, NES>=0)
-  gsea_df_up <- head(gsea_df_up[order(gsea_df_up$p.adjust),], 10)
-  gsea_df_filtered <- rbind(gsea_df_down, gsea_df_up)
-  
-  return(gsea_df_filtered)
-}
-
 get_fgsea_gene_set_input <- function(gene_sets) {
   # convert to named list
   gene_sets_fgsea <- split(gene_sets$gene_symbol, gene_sets$gs_name)
@@ -1082,7 +1045,7 @@ simple_datatable <- function(df, round_cols = NULL) {
 source('./bulk_rna_seq_analysis/config.R')
 capture.output(cfgs[[run]], file=paste0(output_dir, "config.csv"))
 
-# Output Paths (only used if not knitting to rmarkdown)
+# output paths (only used if not knitting to rmarkdown)
 filtering_and_normalizing_impact_out_path <- 
   paste0(output_dir, "filter_norm_impact.pdf")
 pca_scatter_out_path <- 
@@ -1099,10 +1062,6 @@ dge_volcano_out_path <-
   paste0(output_dir, "dge_volcano.html")
 dge_volcano_sig_out_path <- 
   paste0(output_dir, "dge_volcano_sig.html")
-dge_csv_out_path <- 
-  paste0(output_dir, "dge_table.csv")
-all_dge_csv_out_path <- 
-  paste0(output_dir, "all_dge_table.csv")
 sig_dge_datatable_out_path <- 
   paste0(output_dir, "dge_table.html")
 isoform_analysis_out_dir <- 
@@ -1124,7 +1083,13 @@ gsea_line_plot_path <-
 gsea_bubble_plot_path <- 
   paste0(output_dir, 'gsea_bubble_plot.pdf')
 
-#' # Data Preparation  
+# DGE output paths (produced even when knitting to rmarkdown)
+dge_csv_out_path <- 
+  paste0(output_dir, "dge_table.csv")
+all_dge_csv_out_path <- 
+  paste0(output_dir, "all_dge_table.csv")
+
+#' # Getting Specification Tables  
 #' 
 #' * The study design file is read in  
 #' * A design matrix is constructed according to the specifications in a 
@@ -1132,7 +1097,7 @@ gsea_bubble_plot_path <-
 #' * The study design and design matrix contain information about our samples, 
 #' our variable of interest, and our model specification
 #' 
-#' ## Study Design
+#' ### Study Design
 study_design <- get_study_design_df(study_design_path)
 simple_datatable(study_design)
 
@@ -1141,7 +1106,7 @@ abundance_paths <- get_abundance_paths(abundance_root_dir, sample_labels)
 study_design <- assign_abundance_paths_to_study_design(study_design, abundance_paths)
 design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 
-#' ## Design Matrix
+#' ### Design Matrix
 simple_datatable(design_matrix)
 abundance_paths <- study_design$abundance_path
 
@@ -1182,10 +1147,9 @@ simple_datatable(head(gene_counts), sample_labels)
 c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
   get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
                          min_samples_with_min_cpm)
-
-#' ## Filtered, Log2CPM counts
 log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
                                       long = FALSE)
+#' ### Filtered, Log2CPM
 simple_datatable(head(log_cpm_filt_norm), sample_labels)
 
 
@@ -1233,13 +1197,13 @@ all_dge <- get_sig_dif_expressed_genes(bayes_stats,
                                        min_lfc = 0,
                                        max_p_val = 1.0)
 
-#' ## Differential Gene Expression Volcano Plots
+#' ### Differential Gene Expression Volcano Plots
 plot_dge_volcano(sig_dge,
                  'Significantly Differentially Expressed Genes',
                  dge_volcano_sig_out_path,
                  write_output)
 
-#' ## Differential Gene Expression Table
+#' ### Differential Gene Expression Table
 # merge gene level df with sample cols with gene level df with significance info
 sig_dge <- merge(sig_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
 all_dge <- merge(all_dge, log_cpm_filt_norm, by='gene_id', all.x = TRUE)
@@ -1253,31 +1217,32 @@ plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 #' # Gene Set Enrichment Analysis  
 #' 
 #' Next, Gene Set Enrichment Analysis (GSEA) is performed. This identifies 
-#' biologically relevant sets of genes that are differentally expressed. Even 
-#' when few or none of the genes in a set are individually significantly 
-#' differentially expressed, the set as a whole can nevertheless be found to be 
-#' if the genes generally exhibit differential expression in the same direction.   
+#' biologically relevant sets of genes that are differentally expressed. 
 #' 
-#' * GSEA is performed on custom gene sets defined in a csv file  
+#' * Even when few or none of the genes in a set are individually significantly 
+#' differentially expressed, the set as a whole can nevertheless be found to be 
+#' significantly differentially expressed 
+#' * This is true if the genes exhibit differential expression generally in the 
+#' same direction, even at non-significant levels
+#' * GSEA is performed on custom gene sets defined in a csv file, and then on 
+#'   MSIG gene sets retrieved from the MSIG database
 #'   + GSEA plots are produced and key metrics are presented in a table
-#' * GSEA is performed on MSIG gene sets retrieved from the MSIG database
-#' * Like with the custom gene sets, plots and a table are produced  
-#' * To reduce clutter, only the most significantly up and downregulated 
+#'   + To reduce clutter, only the most significantly up and downregulated 
 #' gene sets are plotted, although all are included in the table  
 #' * Heatmaps are then produced providing more detail about the differential 
 #' expression characteristics of each gene in each gene set  
 #' * Gene sets defined by the GO Consortium are then displayed according to 
 #' their significance and their GO defined aspect in a manhattan plot
 #' 
-#' ## GSEA for Custom Gene Sets 
+#' ### GSEA for Custom Gene Sets 
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
 
-#' ## GSEA for MSIG Gene Sets
+#' ### GSEA for MSIG Gene Sets
 gene_sets_msig <- get_msig_gene_sets('Mus musculus')
 build_and_plot_fgsea(gene_sets_msig, all_dge, 'GSEA for MSIGDB Gene Sets')
 
-#' ## Gene Cluster Differential Expression Heatmap for Custom Gene Sets
+#' ### Gene Cluster Differential Expression Heatmap for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   gene_set <- 
@@ -1285,10 +1250,10 @@ for (gene_set_label in unique(gene_sets_custom$gs_name)) {
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
 }
 
-#' ## Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
+#' ### Gene Cluster Differential Expression Heatmap for Highest/Lowest LFC Genes
 plot_gene_cluster_heatmap(sig_dge, log_cpm_filt_norm)
 
-#' ## Gene Ontology Manhattan Plots
+#' ### Gene Ontology Manhattan Plots
 # split out into upregulated and downregulated sets
 sig_dge_up <- dplyr::filter(sig_dge, logFC >= 0)
 sig_dge_down <- dplyr::filter(sig_dge, logFC < 0)
@@ -1312,28 +1277,28 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
 #' * The shape of the mean/variance trend line can be informative for determining 
 #' if more low count genes should be filtered out 
 #' 
-#' ## Principal Component Analysis  
+#' ### Principal Component Analysis  
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
 plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
 
-#' ## Sample Cluster Dendogram
+#' ### Sample Cluster Dendogram
 plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
                               sample_cluster_out_path, write_output)
 
 # sleep to stop knitr bug where plots repeat
 Sys.sleep(5)
 
-#' ## Filtering and Normalization Impact
+#' ### Filtering and Normalization Impact
 plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
                                          dge_list_filt_norm,
                                          control_label,
                                          filtering_and_normalizing_impact_out_path, 
                                          write_output)
 
-#' ## Mean/Variance Distribution and Trend Line
+#' ### Mean/Variance Distribution and Trend Line
 plot_mean_variance_distribution(mean_variance_weights, 
                                 mean_variance_plot_out_path,
                                 write_output)
