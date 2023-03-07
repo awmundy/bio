@@ -79,9 +79,10 @@ cfgs <-
                         '/media/awmundy/Windows/bio/age_related_steatohepatitis/study_design/study_design.csv',
                       control_label = 'young',
                       experimental_label = 'old',
-                      output_name = 'age_related_steatohepatitis_young_vs_old_comparison.html',
                       output_title = 'Differential Gene Expression Replication of Duan et al Steatohepatitis Aging',
-                      output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/'
+                      output_dir = '/media/awmundy/Windows/bio/age_related_steatohepatitis/outputs/young_vs_old/',
+                      #TODO generalize this
+                      output_html_file = '~/code/bio/docs/index_temp.html'
                     )
        )))
 
@@ -107,8 +108,8 @@ custom_gene_sets_path <- cfgs[[run]]$custom_gene_sets_path
 min_cpm <- cfgs[[run]]$min_cpm
 min_samples_with_min_cpm <- cfgs[[run]]$min_samples_with_min_cpm
 output_dir <- cfgs[[run]]$run_subtype[[run_subtype]]$output_dir
-output_name <- cfgs[[run]]$run_subtype[[run_subtype]]$output_name
 output_title <- cfgs[[run]]$run_subtype[[run_subtype]]$output_title
+output_html_file <- cfgs[[run]]$run_subtype[[run_subtype]]$output_html_file
 
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)

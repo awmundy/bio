@@ -6,8 +6,9 @@
 #'     code_folding: hide
 #'     thumbnails: false
 #'     includes:
-#'       in_header: /home/awmundy/code/bio/docs/analytics.html
-#' ---
+#'       in_header: !expr file.path(here::here(), "docs", "analytics.html")
+#'     verbose: true
+#' ---       
 #' ```{r setup, include=FALSE}
 #' knitr::opts_chunk$set(warning=FALSE, message=FALSE, results='asis')
 #' ```
@@ -1112,13 +1113,13 @@ design_matrix <- get_design_matrix(study_design, FALSE, explanatory_variable)
 simple_datatable(design_matrix)
 abundance_paths <- study_design$abundance_path
 
-#' # Aggregating Counts to Gene Level  
-#' 
-#' * A transcript to gene mapping is downloaded from Ensembl   
-#' * Transcript level abundances are then read in and aggregated to gene level 
-#' using this mapping  
-#' 
-#' A few records of these tables are printed below 
+#' # Aggregating Counts to Gene Level
+#'
+#' * A transcript to gene mapping is downloaded from Ensembl
+#' * Transcript level abundances are then read in and aggregated to gene level
+#' using this mapping
+#'
+#' A few records of these tables are printed below
 
 # Read abundances and build digital gene expression lists
 tx_to_gene_df <- get_transcript_to_gene_df(EnsDb.Mmusculus.v79)
@@ -1132,53 +1133,53 @@ gene_counts <- get_gene_counts(abundance_paths, sample_labels, tx_to_gene_df)
 simple_datatable(head(gene_counts), sample_labels)
 
 
-#' # Filtering, Normalizing, Converting to LogCPM  
-#' Various functions in the edgeR library are then used to further prepare the 
-#' counts.  
-#' 
-#' * The counts are stored in a digital gene expression list object  
-#' * These counts are then filtered according to the minimum counts per million 
-#' thresholds specified in the configuration file  
-#' * Normalization factors are produced for each sample using Trimmed Mean of 
-#' M values (TMM) that account for differences in library sizes and for 
-#' "crowding out" by highly expressed genes  
-#' * The counts are then converted to log2 counts per million, allowing counts 
-#' from different samples to be compared  
+#' # Filtering, Normalizing, Converting to LogCPM
+#' Various functions in the edgeR library are then used to further prepare the
+#' counts.
+#'
+#' * The counts are stored in a digital gene expression list object
+#' * These counts are then filtered according to the minimum counts per million
+#' thresholds specified in the configuration file
+#' * Normalization factors are produced for each sample using Trimmed Mean of
+#' M values (TMM) that account for differences in library sizes and for
+#' "crowding out" by highly expressed genes
+#' * The counts are then converted to log2 counts per million, allowing counts
+#' from different samples to be compared
 
 # Normalization, Filtering, Logging, Converting to Counts per Million
-c(dge_list, dge_list_filt, dge_list_filt_norm) %<-% 
-  get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm, 
+c(dge_list, dge_list_filt, dge_list_filt_norm) %<-%
+  get_dge_list_filt_norm(gene_counts, sample_labels, min_cpm,
                          min_samples_with_min_cpm)
-log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label, 
+log_cpm_filt_norm <- build_log_cpm_df(dge_list_filt_norm, control_label,
                                       long = FALSE)
 #' ### Filtered, Log2CPM
 simple_datatable(head(log_cpm_filt_norm), sample_labels)
 
 
-#' # Differential Gene Expression  
-#' 
-#' The limma library is then used to identify differential gene expression.  
-#' 
-#' * Weights are produced for each sample/gene combination  
-#'   +  These weights are used to handle the heteroskedasticity present in gene 
-#' log counts (the variance is typically lower for higher log count genes)   
-#'   + We don't want heteroskedasticity in our data because we want to be able to identify 
-#' differential expression equally well for both high and low count genes  
-#' * A linear model is then fit at the gene level to the weighted counts  
-#'   + The model variables are defined in the design matrix  
-#'   + The coefficients for this model are differenced according to the 
-#'   design matrix  
-#'   + Example: if the design matrix specifies that we are looking for the 
-#'   change in gene expression of the experimental group with respect to the 
-#'   control group, the control coefficient would be subtracted from the 
-#'   experimental coefficient   
-#' * An Empirical Bayes calculation for each gene is then performed, testing 
-#' for whether there was a significant logfold change in expression  
-#' * P values from the previous step are corrected for multiple 
-#' testing and the significantly differentially expressed genes are identified  
+#' # Differential Gene Expression
+#'
+#' The limma library is then used to identify differential gene expression.
+#'
+#' * Weights are produced for each sample/gene combination
+#'   +  These weights are used to handle the heteroskedasticity present in gene
+#' log counts (the variance is typically lower for higher log count genes)
+#'   + We don't want heteroskedasticity in our data because we want to be able to identify
+#' differential expression equally well for both high and low count genes
+#' * A linear model is then fit at the gene level to the weighted counts
+#'   + The model variables are defined in the design matrix
+#'   + The coefficients for this model are differenced according to the
+#'   design matrix
+#'   + Example: if the design matrix specifies that we are looking for the
+#'   change in gene expression of the experimental group with respect to the
+#'   control group, the control coefficient would be subtracted from the
+#'   experimental coefficient
+#' * An Empirical Bayes calculation for each gene is then performed, testing
+#' for whether there was a significant logfold change in expression
+#' * P values from the previous step are corrected for multiple
+#' testing and the significantly differentially expressed genes are identified
 
-# Build Mean/Variance Weights Across Samples for Each Gene 
-mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm, 
+# Build Mean/Variance Weights Across Samples for Each Gene
+mean_variance_weights <- get_mean_variance_weights(dge_list_filt_norm,
                                                    design_matrix)
 
 # Build Differential Gene Expression Dataframe
@@ -1216,27 +1217,27 @@ write_csv(sig_dge, file=dge_csv_out_path)
 write_csv(all_dge, file=all_dge_csv_out_path)
 plot_dge_datatable(all_dge, sig_dge_datatable_out_path, write_output)
 
-#' # Gene Set Enrichment Analysis  
-#' 
-#' Next, Gene Set Enrichment Analysis (GSEA) is performed. This identifies 
-#' biologically relevant sets of genes that are differentally expressed. 
-#' 
-#' * Even when few or none of the genes in a set are individually significantly 
-#' differentially expressed, the set as a whole can nevertheless be found to be 
-#' significantly differentially expressed 
-#'   + This is true if the genes exhibit differential expression generally in the 
+#' # Gene Set Enrichment Analysis
+#'
+#' Next, Gene Set Enrichment Analysis (GSEA) is performed. This identifies
+#' biologically relevant sets of genes that are differentally expressed.
+#'
+#' * Even when few or none of the genes in a set are individually significantly
+#' differentially expressed, the set as a whole can nevertheless be found to be
+#' significantly differentially expressed
+#'   + This is true if the genes exhibit differential expression generally in the
 #'   same direction, even at non-significant levels
-#' * GSEA is performed on custom gene sets defined in a csv file, and then on 
+#' * GSEA is performed on custom gene sets defined in a csv file, and then on
 #'   MSIG gene sets retrieved from the MSIG database
 #'   + GSEA plots are produced and key metrics are presented in a table
-#'   + To reduce clutter, only the most significantly upregulated and downregulated 
-#'   gene sets are plotted, although all are included in the table  
-#' * Heatmaps are then produced providing more detail about the differential 
-#' expression characteristics of each gene in each gene set  
-#' * Gene sets defined by the GO Consortium are then displayed according to 
+#'   + To reduce clutter, only the most significantly upregulated and downregulated
+#'   gene sets are plotted, although all are included in the table
+#' * Heatmaps are then produced providing more detail about the differential
+#' expression characteristics of each gene in each gene set
+#' * Gene sets defined by the GO Consortium are then displayed according to
 #' their significance and their GO defined aspect in a manhattan plot
-#' 
-#' ### GSEA for Custom Gene Sets 
+#'
+#' ### GSEA for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 build_and_plot_fgsea(gene_sets_custom, all_dge, 'GSEA for Custom Gene Sets')
 
@@ -1247,7 +1248,7 @@ build_and_plot_fgsea(gene_sets_msig, all_dge, 'GSEA for MSIGDB Gene Sets')
 #' ### Gene Cluster Differential Expression Heatmap for Custom Gene Sets
 gene_sets_custom <- get_custom_gene_sets(custom_gene_sets_path)
 for (gene_set_label in unique(gene_sets_custom$gs_name)) {
-  gene_set <- 
+  gene_set <-
     dplyr::filter(gene_sets_custom, gene_sets_custom$gs_name == gene_set_label)
   plot_gene_cluster_heatmap(all_dge, log_cpm_filt_norm, gene_set)
 }
@@ -1267,19 +1268,19 @@ plot_gost_gene_set_enrichment(sig_dge_down, 'mmusculus',
                               gost_plot_down_path, write_output,
                               'Significantly Downregulated Pathways')
 
-#' # Quality Control  
-#' 
-#' To assist with QC, a few other plots are generated  
-#' 
-#' * Principal Component Analysis and cluster dendograms can be useful for 
-#' identifying if the differences between the cohorts in the experiment are 
-#' high   
-#' * The filtering and normalization violin plots help identify imbalanced samples, 
-#' as well as identify the impact of filtering and normalization  
-#' * The shape of the mean/variance trend line can be informative for determining 
-#' if more low count genes should be filtered out 
-#' 
-#' ### Principal Component Analysis  
+#' # Quality Control
+#'
+#' To assist with QC, a few other plots are generated
+#'
+#' * Principal Component Analysis and cluster dendograms can be useful for
+#' identifying if the differences between the cohorts in the experiment are
+#' high
+#' * The filtering and normalization violin plots help identify imbalanced samples,
+#' as well as identify the impact of filtering and normalization
+#' * The shape of the mean/variance trend line can be informative for determining
+#' if more low count genes should be filtered out
+#'
+#' ### Principal Component Analysis
 pca_metrics <- get_pca_metrics(log_cpm_filt_norm)
 plot_pca_scatter(pca_metrics, sample_dimensions, study_design,
                  pca_scatter_out_path, write_output)
@@ -1287,21 +1288,21 @@ plot_pca_small_multiples(pca_metrics, sample_dimensions, study_design,
                          pca_small_multiples_out_path, write_output)
 
 #' ### Sample Cluster Dendogram
-plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels, 
+plot_sample_cluster_dendogram(log_cpm_filt_norm, sample_labels,
                               sample_cluster_out_path, write_output)
 
 # sleep to stop knitr bug where plots repeat
 Sys.sleep(5)
 
 #' ### Filtering and Normalization Impact
-plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt, 
+plot_impact_of_filtering_and_normalizing(dge_list, dge_list_filt,
                                          dge_list_filt_norm,
                                          control_label,
-                                         filtering_and_normalizing_impact_out_path, 
+                                         filtering_and_normalizing_impact_out_path,
                                          write_output)
 
 #' ### Mean/Variance Distribution and Trend Line
-plot_mean_variance_distribution(mean_variance_weights, 
+plot_mean_variance_distribution(mean_variance_weights,
                                 mean_variance_plot_out_path,
                                 write_output)
 
