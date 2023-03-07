@@ -5,6 +5,8 @@
 #'   rmdformats::html_clean:
 #'     code_folding: hide
 #'     thumbnails: false
+#'     includes:
+#'       in_header: /home/awmundy/code/bio/docs/analytics.html
 #' ---
 #' ```{r setup, include=FALSE}
 #' knitr::opts_chunk$set(warning=FALSE, message=FALSE, results='asis')
