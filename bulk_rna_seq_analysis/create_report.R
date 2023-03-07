@@ -1,6 +1,11 @@
+#!/usr/bin/env Rscript
 suppressPackageStartupMessages({
   library(rmarkdown)
   })
+
+# TODO needed to add this to get it runnable from command line- figure out a
+# way around this (maybe with command line args)
+setwd("~/code/bio/")
 
 # import configuration details to get output_dir and output_name/title
 source('./bulk_rna_seq_analysis/config.R')
