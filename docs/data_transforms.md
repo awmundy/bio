@@ -11,7 +11,7 @@ Purpose:
   - Calculates transcript abundance, which is the estimated frequency of transcripts in the sample
 - Inputs:
   - Kallisto Index file
-  - Bulk RNAseq fastq files
+  - Bulk RNAseq fastq files 
 - Purpose:
   - To summarize the transcript distribution
 - Record Level:
